@@ -11,7 +11,7 @@ export interface ISettlement extends Document {
 }
 
 const SettlementSchema: Schema = new Schema({
-  telegramChatId: { type: Number, required: true },
+  telegramChatId: { type: Number, required: true, index: true },
   paidByTelegramUserId: { type: Number, required: true },
   paidToTelegramUserId: { type: Number, required: true },
   amount: { type: String, required: true },

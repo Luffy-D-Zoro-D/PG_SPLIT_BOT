@@ -111,20 +111,20 @@ export class ExpenseService {
   }
 
   static async confirmExpense(expenseId: string): Promise<IExpense | null> {
-    const expense = await Expense.findById(expenseId);
-    if (!expense) return null;
-    
-    expense.status = ExpenseStatus.CONFIRMED;
-    await expense.save();
+    const expense = await Expense.findOneAndUpdate(
+      { _id: expenseId, status: ExpenseStatus.PENDING_CONFIRMATION },
+      { $set: { status: ExpenseStatus.CONFIRMED } },
+      { new: true }
+    );
     return expense;
   }
 
   static async cancelExpense(expenseId: string): Promise<IExpense | null> {
-    const expense = await Expense.findById(expenseId);
-    if (!expense) return null;
-    
-    expense.status = ExpenseStatus.CANCELLED;
-    await expense.save();
+    const expense = await Expense.findOneAndUpdate(
+      { _id: expenseId, status: ExpenseStatus.PENDING_CONFIRMATION },
+      { $set: { status: ExpenseStatus.CANCELLED } },
+      { new: true }
+    );
     return expense;
   }
 
@@ -136,10 +136,20 @@ export class ExpenseService {
     }
     
     // Fuzzy search
+    const matches: number[] = [];
     for (const [key, value] of memberMap.entries()) {
       if (key.includes(lowerName) || lowerName.includes(key)) {
-        return value;
+        if (!matches.includes(value)) {
+          matches.push(value);
+        }
       }
+    }
+    
+    if (matches.length === 1) {
+      return matches[0];
+    } else if (matches.length > 1) {
+      // Ambiguous match, we don't want to silently guess wrong
+      return null;
     }
     
     return null;

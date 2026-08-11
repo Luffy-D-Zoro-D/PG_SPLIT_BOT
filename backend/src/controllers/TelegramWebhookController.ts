@@ -11,6 +11,7 @@ import { WhatsAppService } from '../services/WhatsAppService';
 import axios from 'axios';
 import fs from 'fs';
 import path from 'path';
+import ProcessedUpdate from '../models/ProcessedUpdate';
 
 
 const chatHistories = new Map<number, { role: string, content: string }[]>();
@@ -19,6 +20,20 @@ export class TelegramWebhookController {
   static async handleUpdate(req: Request, res: Response) {
     try {
       const update = req.body;
+      const updateId = update.update_id;
+
+      if (updateId) {
+        try {
+          // Attempt to create a ProcessedUpdate. If it exists, it will throw a duplicate key error (E11000)
+          await ProcessedUpdate.create({ updateId });
+        } catch (e: any) {
+          if (e.code === 11000) {
+            console.log(`[Idempotency] Ignoring duplicate update_id: ${updateId}`);
+            return res.sendStatus(200);
+          }
+          throw e;
+        }
+      }
 
       // If there is a callback query (button press)
       if (update.callback_query) {
@@ -321,24 +336,27 @@ export class TelegramWebhookController {
         return;
       }
 
-      const settlement = await Settlement.findById(settlementId);
+      // Atomically add the user to approvedBy using $addToSet
+      const settlement = await Settlement.findOneAndUpdate(
+        { _id: settlementId, status: 'PENDING_APPROVAL' },
+        { $addToSet: { approvedBy: targetUserId } },
+        { new: true }
+      );
+
       if (!settlement) {
-        await TelegramService.sendMessage(chatId, `❌ Settlement request not found.`);
-        return;
-      }
-
-      if (settlement.status === 'CONFIRMED') {
-        await axios.post(`https://api.telegram.org/bot${process.env.TELEGRAM_BOT_TOKEN}/answerCallbackQuery`, {
-          callback_query_id: callbackQuery.id,
-          text: "✅ Already settled.",
-          show_alert: false
-        }).catch((e: any) => console.error(e));
-        return;
-      }
-
-      if (!settlement.approvedBy.includes(targetUserId)) {
-        settlement.approvedBy.push(targetUserId);
-        await settlement.save();
+        // Either it doesn't exist or it's already CONFIRMED
+        const checkSettlement = await Settlement.findById(settlementId);
+        if (checkSettlement?.status === 'CONFIRMED') {
+          await axios.post(`https://api.telegram.org/bot${process.env.TELEGRAM_BOT_TOKEN}/answerCallbackQuery`, {
+            callback_query_id: callbackQuery.id,
+            text: "✅ Already settled.",
+            show_alert: false
+          }).catch((e: any) => console.error(e));
+          return;
+        } else {
+          await TelegramService.sendMessage(chatId, `❌ Settlement request not found.`);
+          return;
+        }
       }
 
       const debtorId = settlement.paidByTelegramUserId;
@@ -351,15 +369,20 @@ export class TelegramWebhookController {
       const creditorName = (await User.findOne({ telegramUserId: creditorId }))?.firstName || 'Creditor';
 
       if (debtorApproved && creditorApproved) {
-        settlement.status = 'CONFIRMED';
-        await settlement.save();
+        const confirmedSettlement = await Settlement.findOneAndUpdate(
+          { _id: settlementId, status: 'PENDING_APPROVAL' },
+          { $set: { status: 'CONFIRMED' } },
+          { new: true }
+        );
 
-        const msg = `✅ <b>Settlement Confirmed!</b>\n\n${debtorName} has settled ₹${settlement.amount} with ${creditorName}.`;
-        await TelegramService.sendMessage(chatId, msg);
+        if (confirmedSettlement) {
+          const msg = `✅ <b>Settlement Confirmed!</b>\n\n${debtorName} has settled ₹${settlement.amount} with ${creditorName}.`;
+          await TelegramService.sendMessage(chatId, msg);
 
-        if (process.env.WHATSAPP_GROUP_NAME) {
-          const waMsg = `✅ *Settlement Confirmed!*\n\n${debtorName} has settled ₹${settlement.amount} with ${creditorName}.`;
-          await WhatsAppService.sendGroupMessage(process.env.WHATSAPP_GROUP_NAME, waMsg);
+          if (process.env.WHATSAPP_GROUP_NAME) {
+            const waMsg = `✅ *Settlement Confirmed!*\n\n${debtorName} has settled ₹${settlement.amount} with ${creditorName}.`;
+            await WhatsAppService.sendGroupMessage(process.env.WHATSAPP_GROUP_NAME, waMsg);
+          }
         }
       } else {
         const approvedName = callbackQuery.from.first_name;

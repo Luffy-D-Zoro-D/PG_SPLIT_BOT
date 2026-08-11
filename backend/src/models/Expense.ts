@@ -31,7 +31,7 @@ const ParticipantShareSchema = new Schema({
 }, { _id: false });
 
 const ExpenseSchema: Schema = new Schema({
-  telegramChatId: { type: Number, required: true },
+  telegramChatId: { type: Number, required: true, index: true },
   totalAmount: { type: String, required: true },
   paidByTelegramUserId: { type: Number, required: true },
   description: { type: String, required: true },

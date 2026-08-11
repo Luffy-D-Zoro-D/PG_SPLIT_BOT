@@ -18,17 +18,25 @@ export default function App() {
   
   // Search & Filter state
   const [searchQuery, setSearchQuery] = useState('');
+  const [groupId, setGroupId] = useState<string>(localStorage.getItem('pg_groupId') || '');
   
   // Custom Modal State
   const [confirmModal, setConfirmModal] = useState<{ isOpen: boolean, title: string, message: string, onConfirm: () => void } | null>(null);
 
   const fetchData = async () => {
+    if (!groupId) {
+      setLoading(false);
+      return;
+    }
     try {
       const [statsRes, expensesRes, balancesRes] = await Promise.all([
-        fetch('http://localhost:3000/api/stats').then(r => r.json()),
-        fetch('http://localhost:3000/api/expenses').then(r => r.json()),
-        fetch('http://localhost:3000/api/balances').then(r => r.json())
+        fetch(`http://localhost:3000/api/stats?groupId=${groupId}`).then(r => r.json()),
+        fetch(`http://localhost:3000/api/expenses?groupId=${groupId}`).then(r => r.json()),
+        fetch(`http://localhost:3000/api/balances?groupId=${groupId}`).then(r => r.json())
       ]);
+      
+      if (statsRes.error) throw new Error(statsRes.error);
+      
       setStats(statsRes);
       setExpenses(expensesRes);
       setBalances(balancesRes);
@@ -41,10 +49,16 @@ export default function App() {
   };
 
   useEffect(() => {
-    fetchData();
-    const interval = setInterval(fetchData, 15000); // Poll every 15s for live feel
-    return () => clearInterval(interval);
-  }, []);
+    if (groupId) {
+      localStorage.setItem('pg_groupId', groupId);
+      setLoading(true);
+      fetchData();
+      const interval = setInterval(fetchData, 15000); // Poll every 15s for live feel
+      return () => clearInterval(interval);
+    } else {
+      setLoading(false);
+    }
+  }, [groupId]);
 
   const handleDeleteExpense = (id: string) => {
     setConfirmModal({
@@ -80,7 +94,12 @@ export default function App() {
           const res = await fetch('http://localhost:3000/api/settle', {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ debtorId, creditorId, amount: balance.amount })
+            body: JSON.stringify({
+              debtorId: debtorId,
+              creditorId: creditorId,
+              amount: balance.amount,
+              groupId: groupId
+            })
           });
           if (!res.ok) throw new Error('Failed to send request');
           toast.success('Settlement request sent to Telegram!');
@@ -106,7 +125,7 @@ export default function App() {
 
   if (loading) {
     return (
-      <div className="min-h-screen bg-[#09090b] flex items-center justify-center">
+      <div className="min-h-screen bg-neutral-900 text-white flex items-center justify-center font-outfit">
         <motion.div
           animate={{ scale: [1, 1.2, 1], opacity: [0.5, 1, 0.5] }}
           transition={{ repeat: Infinity, duration: 2, ease: "easeInOut" }}
@@ -115,6 +134,43 @@ export default function App() {
           <div className="absolute inset-0 bg-purple-500 blur-3xl opacity-20 rounded-full" />
           <Bot className="w-12 h-12 text-purple-400 relative z-10" />
         </motion.div>
+      </div>
+    );
+  }
+
+  if (!groupId) {
+    return (
+      <div className="min-h-screen bg-[#09090b] text-white flex items-center justify-center font-sans p-4 relative overflow-hidden">
+        <div className="fixed top-[-20%] left-[-10%] w-[50%] h-[50%] bg-purple-600/20 rounded-full blur-[120px] pointer-events-none" />
+        <div className="max-w-md w-full bg-[#18181b]/80 backdrop-blur-xl border border-white/10 p-8 rounded-2xl shadow-2xl flex flex-col items-center relative z-10">
+          <div className="relative w-16 h-16 mb-6">
+            <div className="absolute inset-0 bg-gradient-to-r from-blue-500 to-purple-500 blur-lg opacity-50" />
+            <div className="relative w-full h-full rounded-2xl bg-black border border-white/10 flex items-center justify-center shadow-2xl">
+              <Bot className="w-8 h-8 text-purple-400" />
+            </div>
+          </div>
+          <h1 className="text-2xl font-bold font-heading mb-2">Welcome to PG SPLITTER</h1>
+          <p className="text-neutral-400 text-center mb-6">Enter your Telegram Group ID to view your synchronized ledger.</p>
+          <input 
+            type="text" 
+            placeholder="e.g. -10023456789" 
+            className="w-full bg-black/50 border border-white/10 rounded-xl px-4 py-3 mb-4 text-white placeholder-neutral-500 focus:outline-none focus:border-purple-500/50 focus:ring-1 focus:ring-purple-500/50 transition-all"
+            onKeyDown={(e) => {
+              if (e.key === 'Enter') {
+                setGroupId(e.currentTarget.value.trim());
+              }
+            }}
+          />
+          <button 
+            className="w-full bg-gradient-to-r from-blue-600 to-purple-600 hover:from-blue-500 hover:to-purple-500 text-white font-medium py-3 rounded-xl transition-all shadow-[0_0_20px_rgba(168,85,247,0.3)] hover:shadow-[0_0_30px_rgba(168,85,247,0.5)]"
+            onClick={(e) => {
+              const input = e.currentTarget.previousElementSibling as HTMLInputElement;
+              setGroupId(input.value.trim());
+            }}
+          >
+            Access Ledger
+          </button>
+        </div>
       </div>
     );
   }

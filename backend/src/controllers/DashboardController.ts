@@ -9,11 +9,15 @@ export class DashboardController {
   
   static async getStats(req: Request, res: Response) {
     try {
-      const expensesCount = await Expense.countDocuments();
-      const groupsCount = await Group.countDocuments();
+      const groupIdStr = req.query.groupId as string;
+      if (!groupIdStr) return res.status(400).json({ error: 'groupId is required' });
+      const groupId = parseInt(groupIdStr, 10);
+
+      const expensesCount = await Expense.countDocuments({ telegramChatId: groupId } as any);
+      const groupsCount = await Group.countDocuments(); // This might remain global or just 1
       const usersCount = await User.countDocuments();
       
-      const allExpenses = await Expense.find({ status: 'CONFIRMED' } as any);
+      const allExpenses = await Expense.find({ telegramChatId: groupId, status: 'CONFIRMED' } as any);
       const totalAmountRecorded = allExpenses.reduce((acc, curr) => acc + parseFloat(curr.totalAmount), 0);
       
       res.json({
@@ -29,8 +33,12 @@ export class DashboardController {
 
   static async getExpenses(req: Request, res: Response) {
     try {
-      const expenses = await Expense.find().sort({ createdAt: -1 }).limit(50).lean();
-      const settlements = await Settlement.find().sort({ createdAt: -1 }).limit(50).lean();
+      const groupIdStr = req.query.groupId as string;
+      if (!groupIdStr) return res.status(400).json({ error: 'groupId is required' });
+      const groupId = parseInt(groupIdStr, 10);
+
+      const expenses = await Expense.find({ telegramChatId: groupId } as any).sort({ createdAt: -1 }).limit(50).lean();
+      const settlements = await Settlement.find({ telegramChatId: groupId } as any).sort({ createdAt: -1 }).limit(50).lean();
       
       const userIds = new Set<number>();
       expenses.forEach(e => {
@@ -76,8 +84,12 @@ export class DashboardController {
 
   static async getBalances(req: Request, res: Response) {
     try {
-      const expenses = await Expense.find({ status: 'CONFIRMED' } as any);
-      const settlements = await Settlement.find();
+      const groupIdStr = req.query.groupId as string;
+      if (!groupIdStr) return res.status(400).json({ error: 'groupId is required' });
+      const groupId = parseInt(groupIdStr, 10);
+
+      const expenses = await Expense.find({ telegramChatId: groupId, status: 'CONFIRMED' } as any);
+      const settlements = await Settlement.find({ telegramChatId: groupId } as any);
       
       const balances = LedgerService.calculateBalances(expenses, settlements);
       
@@ -118,7 +130,27 @@ export class DashboardController {
   static async deleteExpense(req: Request, res: Response) {
     try {
       const { id } = req.params;
-      await Expense.findByIdAndDelete(id);
+      const expense = await Expense.findById(id);
+      
+      if (!expense) return res.status(404).json({ error: 'Expense not found' });
+
+      // Check if any confirmed settlements exist in this group AFTER the expense was created.
+      // (As a simplified safety rule, we block deletion if any settlements exist in the group to avoid complex time-travel calculations)
+      const settlementCount = await Settlement.countDocuments({ 
+        telegramChatId: expense.telegramChatId, 
+        status: 'CONFIRMED' 
+      });
+
+      if (settlementCount > 0) {
+        return res.status(400).json({ 
+          error: 'Cannot delete expense because settlements have already been confirmed in this group. Please create an offsetting adjustment expense instead.' 
+        });
+      }
+
+      // Safe cancellation instead of deletion
+      expense.status = 'CANCELLED' as any;
+      await expense.save();
+      
       res.json({ success: true });
     } catch (e) {
       res.status(500).json({ error: 'Failed to delete expense' });
@@ -127,11 +159,11 @@ export class DashboardController {
 
   static async settleBalance(req: Request, res: Response) {
     try {
-      const { debtorId, creditorId, amount } = req.body;
+      const { debtorId, creditorId, amount, groupId } = req.body;
       
-      // Find the chat ID from an existing expense (assuming all in one group for now)
-      const anyExpense = await Expense.findOne();
-      const chatId = anyExpense?.telegramChatId || 0;
+      if (!groupId) return res.status(400).json({ error: 'groupId is required for settlement' });
+
+      const chatId = parseInt(groupId);
 
       const debtorName = (await User.findOne({ telegramUserId: parseInt(debtorId) }))?.firstName || 'Debtor';
       const creditorName = (await User.findOne({ telegramUserId: parseInt(creditorId) }))?.firstName || 'Creditor';

@@ -53,6 +53,8 @@ export class LedgerService {
 
     // 2. Process Settlements (Payments)
     for (const settlement of settlements) {
+      if (settlement.status !== 'CONFIRMED') continue;
+      
       // Settlement: paidBy A, paidTo B. Meaning A paid B.
       // This is equivalent to B owing A the amount, which nets against A owing B.
       const debtorId = settlement.paidToTelegramUserId; 
