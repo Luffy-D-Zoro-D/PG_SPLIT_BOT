@@ -30,8 +30,12 @@ export class ExpenseService {
       return { error: 'No members in this group.' };
     }
 
+    // Get sender name so AI knows who "I" refers to
+    const senderUser = users.find(u => u.telegramUserId === fromUserId);
+    const senderName = senderUser ? (senderUser.firstName || senderUser.username || undefined) : undefined;
+
     // Call AIService
-    const extraction = await AIService.extractExpense(text, memberNames, chatHistory);
+    const extraction = await AIService.extractExpense(text, memberNames, chatHistory, senderName);
 
     if (extraction.intent === 'CHAT') {
       return { error: 'CHAT', chatResponse: extraction.chatResponse || 'Hello!' };

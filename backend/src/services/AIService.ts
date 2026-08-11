@@ -5,7 +5,7 @@ import dotenv from 'dotenv';
 
 dotenv.config();
 
-const openai = new OpenAI({ 
+const openai = new OpenAI({
     apiKey: process.env.AI_API_KEY || 'fake_key_for_build',
     baseURL: process.env.AI_BASE_URL || 'https://api.groq.com/openai/v1'
 });
@@ -38,12 +38,13 @@ export const ExpenseExtractionSchema = z.object({
 export type ExpenseExtraction = z.infer<typeof ExpenseExtractionSchema>;
 
 export class AIService {
-    static async extractExpense(text: string, groupMembers: string[], chatHistory: { role: string, content: string }[] = []): Promise<ExpenseExtraction> {
+    static async extractExpense(text: string, groupMembers: string[], chatHistory: { role: string, content: string }[] = [], senderName?: string): Promise<ExpenseExtraction> {
         const prompt = `
 You are an AI assistant that extracts expense information from natural language messages.
 The message can be in English, Hindi, Marathi, Hinglish, Marathinglish, or mixed languages.
 
 Group members: ${groupMembers.join(', ')}
+${senderName ? `The person sending this message is: ${senderName}. When they say "I", "me", "mene", "maine", "mi" or refer to themselves, it means ${senderName}.` : ''}
 
 Analyze the text and output ONLY a valid JSON object matching this structure:
 {
@@ -95,8 +96,8 @@ Rules:
         });
 
         const content = response.choices[0]?.message?.content;
-        console.log(`[AI Raw Output]:\n${content}\n`);
-        
+        // console.log(`[AI Raw Output]:\n${content}\n`);
+
         if (!content) {
             throw new Error('No response from AI provider');
         }

@@ -5,6 +5,8 @@ export interface ISettlement extends Document {
   paidByTelegramUserId: number;
   paidToTelegramUserId: number;
   amount: string; // Decimal stored as string
+  status: 'PENDING_APPROVAL' | 'CONFIRMED';
+  approvedBy: number[]; // Array of telegramUserIds
   createdAt: Date;
 }
 
@@ -13,6 +15,8 @@ const SettlementSchema: Schema = new Schema({
   paidByTelegramUserId: { type: Number, required: true },
   paidToTelegramUserId: { type: Number, required: true },
   amount: { type: String, required: true },
+  status: { type: String, enum: ['PENDING_APPROVAL', 'CONFIRMED'], default: 'PENDING_APPROVAL' },
+  approvedBy: { type: [Number], default: [] }
 }, {
   timestamps: true
 });

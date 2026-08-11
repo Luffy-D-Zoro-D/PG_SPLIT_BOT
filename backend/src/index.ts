@@ -5,6 +5,7 @@ import dotenv from 'dotenv';
 import { TelegramWebhookController } from './controllers/TelegramWebhookController';
 import { DashboardController } from './controllers/DashboardController';
 import { TelegramService } from './services/TelegramService';
+import { WhatsAppService } from './services/WhatsAppService';
 
 import path from 'path';
 
@@ -46,6 +47,9 @@ async function startServer() {
           console.error('❌ Failed to set Telegram Webhook');
         }
       }
+
+      // Initialize WhatsApp Client
+      WhatsAppService.initialize();
     });
   } catch (e) {
     console.error('❌ Error starting server:', e);

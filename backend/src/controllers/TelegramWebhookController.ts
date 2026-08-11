@@ -7,6 +7,8 @@ import Expense from '../models/Expense';
 import Settlement from '../models/Settlement';
 import { LedgerService } from '../services/LedgerService';
 import { AIService } from '../services/AIService';
+import { WhatsAppService } from '../services/WhatsAppService';
+import axios from 'axios';
 import fs from 'fs';
 import path from 'path';
 
@@ -48,17 +50,17 @@ export class TelegramWebhookController {
     if (message.photo && message.photo.length > 0) {
       const highestResPhoto = message.photo[message.photo.length - 1];
       const telegramFilePath = await TelegramService.getFile(highestResPhoto.file_id);
-      
+
       if (telegramFilePath) {
         const destName = `img_${Date.now()}.jpg`;
         const destPath = path.join(process.cwd(), 'uploads', destName);
         const localPath = await TelegramService.downloadFile(telegramFilePath, destPath);
-        
+
         if (localPath) {
           imageUrl = `/uploads/${destName}`;
         }
       }
-      
+
       if (!text) {
         text = "I attached a receipt. Please record this expense.";
       }
@@ -131,11 +133,11 @@ export class TelegramWebhookController {
 
     // 4. Process natural language
     console.log(`\n--- NEW MESSAGE ---`);
-    console.log(`[Telegram received] User: ${from.first_name}, Text/Transcribed: "${text}"`);
+    console.log(`[Telegram received] \nUser: ${from.first_name}, \nText/Transcribed: "${text}"\n\n`);
 
     const result = await ExpenseService.processTextMessage(chatId, from.id, text, history.slice(0, -1), imageUrl); // Pass history excluding the current message
 
-    console.log(`[AI output processed] Result:`, JSON.stringify(result, null, 2));
+    // console.log(`[AI output processed] Result:`, JSON.stringify(result, null, 2));
 
     if ('error' in result) {
       if (result.clarificationQuestion) {
@@ -233,11 +235,139 @@ export class TelegramWebhookController {
       const expense = await ExpenseService.confirmExpense(expenseId);
       if (expense) {
         await TelegramService.sendMessage(chatId, `✅ Expense of ₹${expense.totalAmount} confirmed.`);
+
+        if (process.env.WHATSAPP_GROUP_NAME) {
+          const payer = await User.findOne({ telegramUserId: expense.paidByTelegramUserId });
+          const payerName = payer?.firstName || payer?.username || 'Unknown';
+
+          // Build participant names for breakdown
+          const allUserIds = new Set<number>();
+          allUserIds.add(expense.paidByTelegramUserId);
+          expense.sharedParticipants.forEach(p => allUserIds.add(p.telegramUserId));
+          expense.personalExpenses.forEach(p => allUserIds.add(p.telegramUserId));
+          const users = await User.find({ telegramUserId: { $in: Array.from(allUserIds) } }).lean();
+          const userMap = new Map<number, string>();
+          users.forEach(u => userMap.set(u.telegramUserId, u.firstName || u.username || 'Unknown'));
+
+          // Build the message
+          let msg = `🧾 *New Expense Confirmed!*\n\n`;
+          msg += `📝 *${expense.description || 'Expense'}*\n`;
+          msg += `💰 Total: ₹${expense.totalAmount}\n`;
+          msg += `👤 Paid by: ${payerName}\n`;
+          msg += `📅 ${new Date().toLocaleString('en-IN', { timeZone: 'Asia/Kolkata' })}\n`;
+
+          // Shared split
+          if (parseFloat(expense.sharedAmount) > 0 && expense.sharedParticipants.length > 0) {
+            msg += `\n📊 *Shared Split (₹${expense.sharedAmount}):*\n`;
+            for (const p of expense.sharedParticipants) {
+              const name = userMap.get(p.telegramUserId) || 'Unknown';
+              msg += `  • ${name}: ₹${p.share}\n`;
+            }
+          }
+
+          // Personal expenses
+          if (expense.personalExpenses.length > 0) {
+            msg += `\n🔒 *Personal Expenses:*\n`;
+            for (const p of expense.personalExpenses) {
+              const name = userMap.get(p.telegramUserId) || 'Unknown';
+              msg += `  • ${name}: ₹${p.share}\n`;
+            }
+          }
+
+          // Current balances
+          const allExpenses = await Expense.find({ telegramChatId: chatId, status: 'CONFIRMED' } as any);
+          const allSettlements = await Settlement.find({ telegramChatId: chatId } as any);
+          const balances = LedgerService.calculateBalances(allExpenses, allSettlements);
+
+          let hasBalances = false;
+          let balanceText = `\n💳 *Current Balances:*\n`;
+          for (const debtorStr in balances) {
+            const debtorId = parseInt(debtorStr, 10);
+            for (const creditorStr in balances[debtorStr]) {
+              const creditorId = parseInt(creditorStr, 10);
+              const amount = balances[debtorStr][creditorId];
+              const debtorName = userMap.get(debtorId) || 'Unknown';
+              const creditorName = userMap.get(creditorId) || 'Unknown';
+              balanceText += `  • ${debtorName} ➜ ${creditorName}: ₹${amount}\n`;
+              hasBalances = true;
+            }
+          }
+
+          if (hasBalances) {
+            msg += balanceText;
+          } else {
+            msg += `\n✅ *All settled up!* 🎉\n`;
+          }
+
+          await WhatsAppService.sendGroupMessage(process.env.WHATSAPP_GROUP_NAME, msg);
+        }
       }
     } else if (data.startsWith('cancel_')) {
       const expenseId = data.split('_')[1];
       await ExpenseService.cancelExpense(expenseId);
       await TelegramService.sendMessage(chatId, `❌ Expense cancelled.`);
+    } else if (data.startsWith('approve_settlement_')) {
+      const parts = data.split('_');
+      const settlementId = parts[2];
+      const targetUserId = parseInt(parts[3], 10); // The user who is supposed to be clicking this button
+
+      if (callbackQuery.from.id !== targetUserId) {
+        // Send a temporary alert to the user who clicked wrongly
+        await axios.post(`https://api.telegram.org/bot${process.env.TELEGRAM_BOT_TOKEN}/answerCallbackQuery`, {
+          callback_query_id: callbackQuery.id,
+          text: "❌ You cannot approve on behalf of this user.",
+          show_alert: true
+        }).catch((e: any) => console.error(e));
+        return;
+      }
+
+      const settlement = await Settlement.findById(settlementId);
+      if (!settlement) {
+        await TelegramService.sendMessage(chatId, `❌ Settlement request not found.`);
+        return;
+      }
+
+      if (settlement.status === 'CONFIRMED') {
+        await axios.post(`https://api.telegram.org/bot${process.env.TELEGRAM_BOT_TOKEN}/answerCallbackQuery`, {
+          callback_query_id: callbackQuery.id,
+          text: "✅ Already settled.",
+          show_alert: false
+        }).catch((e: any) => console.error(e));
+        return;
+      }
+
+      if (!settlement.approvedBy.includes(targetUserId)) {
+        settlement.approvedBy.push(targetUserId);
+        await settlement.save();
+      }
+
+      const debtorId = settlement.paidByTelegramUserId;
+      const creditorId = settlement.paidToTelegramUserId;
+
+      const debtorApproved = settlement.approvedBy.includes(debtorId);
+      const creditorApproved = settlement.approvedBy.includes(creditorId);
+
+      const debtorName = (await User.findOne({ telegramUserId: debtorId }))?.firstName || 'Debtor';
+      const creditorName = (await User.findOne({ telegramUserId: creditorId }))?.firstName || 'Creditor';
+
+      if (debtorApproved && creditorApproved) {
+        settlement.status = 'CONFIRMED';
+        await settlement.save();
+
+        const msg = `✅ <b>Settlement Confirmed!</b>\n\n${debtorName} has settled ₹${settlement.amount} with ${creditorName}.`;
+        await TelegramService.sendMessage(chatId, msg);
+
+        if (process.env.WHATSAPP_GROUP_NAME) {
+          const waMsg = `✅ *Settlement Confirmed!*\n\n${debtorName} has settled ₹${settlement.amount} with ${creditorName}.`;
+          await WhatsAppService.sendGroupMessage(process.env.WHATSAPP_GROUP_NAME, waMsg);
+        }
+      } else {
+        const approvedName = callbackQuery.from.first_name;
+        const waitingForId = debtorApproved ? creditorId : debtorId;
+        const waitingForName = debtorApproved ? creditorName : debtorName;
+        
+        await TelegramService.sendMessage(chatId, `⏳ ${approvedName} approved the settlement.\n<i>Waiting for ${waitingForName} to approve...</i>`);
+      }
     }
   }
 
