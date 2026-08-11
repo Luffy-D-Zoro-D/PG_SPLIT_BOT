@@ -28,7 +28,7 @@ app.delete('/api/expenses/:id', DashboardController_1.DashboardController.delete
 app.post('/api/settle', DashboardController_1.DashboardController.settleBalance);
 // Serve frontend static files in production
 app.use(express_1.default.static(path_1.default.join(__dirname, '../../frontend/dist')));
-app.get('*', (req, res) => {
+app.get('/{*path}', (req, res) => {
     res.sendFile(path_1.default.join(__dirname, '../../frontend/dist/index.html'));
 });
 const PORT = process.env.PORT || 3000;
