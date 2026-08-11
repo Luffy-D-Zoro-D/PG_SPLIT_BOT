@@ -20,8 +20,7 @@ class WhatsAppService {
                 args: ['--no-sandbox', '--disable-setuid-sandbox']
             },
             webVersionCache: {
-                type: 'remote',
-                remotePath: 'https://raw.githubusercontent.com/wppconnect-team/wa-version/main/html/2.2412.54.html',
+                type: 'none'
             }
         });
         this.client.on('qr', (qr) => {
@@ -52,14 +51,26 @@ class WhatsAppService {
                 return false;
             }
             // Use the library's internal WAWebCollections to fetch chats (bypasses broken getChats)
-            const chats = await this.client.pupPage.evaluate(() => {
-                const chatCollection = window.require('WAWebCollections').Chat;
-                return chatCollection.getModelsArray().map((c) => ({
+            let chats = [];
+            try {
+                chats = await this.client.pupPage.evaluate(() => {
+                    const chatCollection = window.require('WAWebCollections').Chat;
+                    return chatCollection.getModelsArray().map((c) => ({
+                        id: c.id._serialized,
+                        name: c.name || c.formattedTitle || '',
+                        isGroup: c.id._serialized.endsWith('@g.us')
+                    }));
+                });
+            }
+            catch (evalError) {
+                console.warn('⚠️ WhatsApp pupPage evaluate failed (detached frame?), falling back to getChats():', evalError.message);
+                const rawChats = await this.client.getChats();
+                chats = rawChats.map((c) => ({
                     id: c.id._serialized,
-                    name: c.name || c.formattedTitle || '',
-                    isGroup: c.id._serialized.endsWith('@g.us')
+                    name: c.name,
+                    isGroup: c.isGroup
                 }));
-            });
+            }
             // Find the group chat matching the name
             const targetGroup = chats.find((chat) => chat.isGroup && chat.name === groupName);
             if (!targetGroup) {

@@ -30,9 +30,9 @@ export default function App() {
     }
     try {
       const [statsRes, expensesRes, balancesRes] = await Promise.all([
-        fetch(`http://localhost:3000/api/stats?groupId=${groupId}`).then(r => r.json()),
-        fetch(`http://localhost:3000/api/expenses?groupId=${groupId}`).then(r => r.json()),
-        fetch(`http://localhost:3000/api/balances?groupId=${groupId}`).then(r => r.json())
+        fetch(`/api/stats?groupId=${groupId}`).then(r => r.json()),
+        fetch(`/api/expenses?groupId=${groupId}`).then(r => r.json()),
+        fetch(`/api/balances?groupId=${groupId}`).then(r => r.json())
       ]);
       
       if (statsRes.error) throw new Error(statsRes.error);
@@ -68,7 +68,7 @@ export default function App() {
       onConfirm: async () => {
         setConfirmModal(null);
         try {
-          const res = await fetch(`http://localhost:3000/api/expenses/${id}`, {
+          const res = await fetch(`/api/expenses/${id}`, {
             method: 'DELETE'
           });
           if (!res.ok) throw new Error('Failed to delete');
@@ -91,7 +91,7 @@ export default function App() {
         setConfirmModal(null);
         const [debtorId, creditorId] = balance.id.split('-');
         try {
-          const res = await fetch('http://localhost:3000/api/settle', {
+          const res = await fetch('/api/settle', {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({
@@ -322,7 +322,7 @@ export default function App() {
                             {/\.(mp3|wav|ogg|oga|m4a|aac)$/i.test(entry.imageUrl) ? (
                                <Activity className="w-6 h-6 text-purple-400" />
                             ) : (
-                               <img src={`http://localhost:3000${entry.imageUrl}`} alt="Receipt" className="w-full h-full object-cover" />
+                               <img src={entry.imageUrl} alt="Receipt" className="w-full h-full object-cover" />
                             )}
                           </div>
                         ) : (
@@ -508,7 +508,7 @@ export default function App() {
               {selectedExpense.imageUrl && (
                 <div className="md:w-1/2 bg-black/50 p-6 flex flex-col items-center justify-center border-b md:border-b-0 md:border-r border-white/5 relative group">
                   <div className="absolute inset-0 bg-gradient-to-t from-black/80 via-transparent to-transparent opacity-0 group-hover:opacity-100 transition-opacity flex items-end justify-center pb-6 z-10 pointer-events-none">
-                    <a href={`http://localhost:3000${selectedExpense.imageUrl}`} target="_blank" rel="noreferrer" className="px-4 py-2 bg-white/10 backdrop-blur-md rounded-full text-sm font-medium hover:bg-white/20 transition-colors text-white pointer-events-auto">View Original</a>
+                    <a href={selectedExpense.imageUrl} target="_blank" rel="noreferrer" className="px-4 py-2 bg-white/10 backdrop-blur-md rounded-full text-sm font-medium hover:bg-white/20 transition-colors text-white pointer-events-auto">View Original</a>
                   </div>
                   {/\.(mp3|wav|ogg|oga|m4a|aac)$/i.test(selectedExpense.imageUrl) ? (
                     <div className="w-full flex flex-col items-center justify-center space-y-6">
@@ -517,13 +517,13 @@ export default function App() {
                       </div>
                       <audio 
                         controls 
-                        src={`http://localhost:3000${selectedExpense.imageUrl}`} 
+                        src={selectedExpense.imageUrl} 
                         className="w-full max-w-sm"
                       />
                     </div>
                   ) : (
                     <img 
-                      src={`http://localhost:3000${selectedExpense.imageUrl}`} 
+                      src={selectedExpense.imageUrl} 
                       alt="Receipt" 
                       className="max-w-full max-h-[60vh] object-contain rounded-xl shadow-2xl relative z-0"
                     />

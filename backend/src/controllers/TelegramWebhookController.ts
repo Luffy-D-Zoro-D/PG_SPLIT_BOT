@@ -316,11 +316,11 @@ export class TelegramWebhookController {
 
         let hasBalances = false;
         let balanceText = `\n💳 <b>Current Balances:</b>\n`;
-        for (const debtorStr in balances) {
+        for (const debtorStr in balances.net) {
           const debtorId = parseInt(debtorStr, 10);
-          for (const creditorStr in balances[debtorStr]) {
+          for (const creditorStr in balances.net[debtorStr]) {
             const creditorId = parseInt(creditorStr, 10);
-            const amount = balances[debtorStr][creditorId];
+            const amount = balances.net[debtorStr][creditorId];
             const debtorName = userMap.get(debtorId) || 'Unknown';
             const creditorName = userMap.get(creditorId) || 'Unknown';
             balanceText += `  • ${debtorName} ➜ ${creditorName}: ₹${amount}\n`;
@@ -429,17 +429,17 @@ export class TelegramWebhookController {
     let text = '<b>💰 Current Balances</b>\n\n';
 
     let hasBalances = false;
-    for (const debtorIdStr in balances) {
+    for (const debtorIdStr in balances.net) {
       const debtorId = parseInt(debtorIdStr, 10);
       const debtor = await User.findOne({ telegramUserId: debtorId });
       const debtorName = debtor?.firstName || debtor?.username || 'Unknown';
 
-      for (const creditorIdStr in balances[debtorId]) {
+      for (const creditorIdStr in balances.net[debtorId]) {
         const creditorId = parseInt(creditorIdStr, 10);
         const creditor = await User.findOne({ telegramUserId: creditorId });
         const creditorName = creditor?.firstName || creditor?.username || 'Unknown';
 
-        const amount = balances[debtorId][creditorId];
+        const amount = balances.net[debtorId][creditorId];
         text += `${debtorName} owes ${creditorName} ₹${amount}\n`;
         hasBalances = true;
       }

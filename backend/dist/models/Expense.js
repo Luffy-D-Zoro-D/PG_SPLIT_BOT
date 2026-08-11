@@ -46,7 +46,7 @@ const ParticipantShareSchema = new mongoose_1.Schema({
     share: { type: String, required: true }
 }, { _id: false });
 const ExpenseSchema = new mongoose_1.Schema({
-    telegramChatId: { type: Number, required: true },
+    telegramChatId: { type: Number, required: true, index: true },
     totalAmount: { type: String, required: true },
     paidByTelegramUserId: { type: Number, required: true },
     description: { type: String, required: true },
@@ -54,6 +54,7 @@ const ExpenseSchema = new mongoose_1.Schema({
     sharedAmount: { type: String, required: true },
     sharedParticipants: { type: [ParticipantShareSchema], default: [] },
     personalExpenses: { type: [ParticipantShareSchema], default: [] },
+    itemsBreakdown: { type: [String], default: [] },
     imageUrl: { type: String },
 }, {
     timestamps: true

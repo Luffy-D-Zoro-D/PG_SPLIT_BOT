@@ -14,7 +14,6 @@ const LedgerService_1 = require("../services/LedgerService");
 const AIService_1 = require("../services/AIService");
 const WhatsAppService_1 = require("../services/WhatsAppService");
 const axios_1 = __importDefault(require("axios"));
-const fs_1 = __importDefault(require("fs"));
 const path_1 = __importDefault(require("path"));
 const ProcessedUpdate_1 = __importDefault(require("../models/ProcessedUpdate"));
 const chatHistories = new Map();
@@ -87,7 +86,7 @@ class TelegramWebhookController {
                 if (localPath) {
                     try {
                         text = await AIService_1.AIService.transcribeAudio(localPath);
-                        fs_1.default.unlinkSync(localPath); // clean up
+                        imageUrl = `/uploads/${destName}`; // Save the audio URL just like images
                     }
                     catch (e) {
                         await TelegramService_1.TelegramService.sendMessage(chatId, '❌ Failed to understand the audio.');
@@ -151,6 +150,8 @@ class TelegramWebhookController {
         }
         // Successfully parsed
         const expense = result;
+        // Clear the chat history so the next expense doesn't get merged with this one
+        chatHistories.delete(chatId);
         const allUserIds = new Set();
         allUserIds.add(expense.paidByTelegramUserId);
         expense.sharedParticipants.forEach(p => allUserIds.add(p.telegramUserId));
@@ -160,8 +161,18 @@ class TelegramWebhookController {
         users.forEach(u => userMap.set(u.telegramUserId, u.firstName || u.username || u.telegramUserId.toString()));
         const paidByName = userMap.get(expense.paidByTelegramUserId) || 'Unknown';
         let confirmText = `🧾 <b>Expense Detected</b>\n\n`;
+        if (expense.description) {
+            confirmText += `📝 <b>Description:</b> ${expense.description}\n\n`;
+        }
         confirmText += `💰 Total: ₹${expense.totalAmount}\n`;
         confirmText += `👤 Paid by: ${paidByName}\n\n`;
+        if (expense.itemsBreakdown && expense.itemsBreakdown.length > 0) {
+            confirmText += `🛒 <b>Itemized Breakdown:</b>\n`;
+            expense.itemsBreakdown.forEach(item => {
+                confirmText += `  • ${item}\n`;
+            });
+            confirmText += `\n`;
+        }
         if (parseFloat(expense.sharedAmount) > 0) {
             confirmText += `<b>Shared expense: ₹${expense.sharedAmount}</b>\n\n`;
             expense.sharedParticipants.forEach(p => {
@@ -216,64 +227,73 @@ class TelegramWebhookController {
             const expenseId = data.split('_')[1];
             const expense = await ExpenseService_1.ExpenseService.confirmExpense(expenseId);
             if (expense) {
-                await TelegramService_1.TelegramService.sendMessage(chatId, `✅ Expense of ₹${expense.totalAmount} confirmed.`);
+                const payer = await User_1.default.findOne({ telegramUserId: expense.paidByTelegramUserId });
+                const payerName = payer?.firstName || payer?.username || 'Unknown';
+                // Build participant names for breakdown
+                const allUserIds = new Set();
+                allUserIds.add(expense.paidByTelegramUserId);
+                expense.sharedParticipants.forEach(p => allUserIds.add(p.telegramUserId));
+                expense.personalExpenses.forEach(p => allUserIds.add(p.telegramUserId));
+                const users = await User_1.default.find({ telegramUserId: { $in: Array.from(allUserIds) } }).lean();
+                const userMap = new Map();
+                users.forEach(u => userMap.set(u.telegramUserId, u.firstName || u.username || 'Unknown'));
+                // Build the message
+                let msg = `🧾 <b>New Expense Confirmed!</b>\n\n`;
+                msg += `📝 <b>${expense.description || 'Expense'}</b>\n`;
+                msg += `💰 Total: ₹${expense.totalAmount}\n`;
+                msg += `👤 Paid by: ${payerName}\n`;
+                msg += `📅 ${new Date().toLocaleString('en-IN', { timeZone: 'Asia/Kolkata' })}\n`;
+                // Shared split
+                if (parseFloat(expense.sharedAmount) > 0 && expense.sharedParticipants.length > 0) {
+                    msg += `\n📊 <b>Shared Split (₹${expense.sharedAmount}):</b>\n`;
+                    for (const p of expense.sharedParticipants) {
+                        const name = userMap.get(p.telegramUserId) || 'Unknown';
+                        msg += `  • ${name}: ₹${p.share}\n`;
+                    }
+                }
+                // Personal expenses
+                if (expense.personalExpenses.length > 0) {
+                    msg += `\n🔒 <b>Personal Expenses:</b>\n`;
+                    for (const p of expense.personalExpenses) {
+                        const name = userMap.get(p.telegramUserId) || 'Unknown';
+                        msg += `  • ${name}: ₹${p.share}\n`;
+                    }
+                }
+                if (expense.itemsBreakdown && expense.itemsBreakdown.length > 0) {
+                    msg += `\n🛒 <b>Itemized Breakdown:</b>\n`;
+                    expense.itemsBreakdown.forEach(item => {
+                        msg += `  • ${item}\n`;
+                    });
+                }
+                // Current balances
+                const allExpenses = await Expense_1.default.find({ telegramChatId: chatId, status: 'CONFIRMED' });
+                const allSettlements = await Settlement_1.default.find({ telegramChatId: chatId });
+                const balances = LedgerService_1.LedgerService.calculateBalances(allExpenses, allSettlements);
+                let hasBalances = false;
+                let balanceText = `\n💳 <b>Current Balances:</b>\n`;
+                for (const debtorStr in balances.net) {
+                    const debtorId = parseInt(debtorStr, 10);
+                    for (const creditorStr in balances.net[debtorStr]) {
+                        const creditorId = parseInt(creditorStr, 10);
+                        const amount = balances.net[debtorStr][creditorId];
+                        const debtorName = userMap.get(debtorId) || 'Unknown';
+                        const creditorName = userMap.get(creditorId) || 'Unknown';
+                        balanceText += `  • ${debtorName} ➜ ${creditorName}: ₹${amount}\n`;
+                        hasBalances = true;
+                    }
+                }
+                if (hasBalances) {
+                    msg += balanceText;
+                }
+                else {
+                    msg += `\n✅ <b>All settled up!</b> 🎉\n`;
+                }
+                // Send rich message to Telegram
+                await TelegramService_1.TelegramService.sendMessage(chatId, msg);
+                // Optionally send to WhatsApp (replacing HTML bold with WhatsApp asterisk bold)
                 if (process.env.WHATSAPP_GROUP_NAME) {
-                    const payer = await User_1.default.findOne({ telegramUserId: expense.paidByTelegramUserId });
-                    const payerName = payer?.firstName || payer?.username || 'Unknown';
-                    // Build participant names for breakdown
-                    const allUserIds = new Set();
-                    allUserIds.add(expense.paidByTelegramUserId);
-                    expense.sharedParticipants.forEach(p => allUserIds.add(p.telegramUserId));
-                    expense.personalExpenses.forEach(p => allUserIds.add(p.telegramUserId));
-                    const users = await User_1.default.find({ telegramUserId: { $in: Array.from(allUserIds) } }).lean();
-                    const userMap = new Map();
-                    users.forEach(u => userMap.set(u.telegramUserId, u.firstName || u.username || 'Unknown'));
-                    // Build the message
-                    let msg = `🧾 *New Expense Confirmed!*\n\n`;
-                    msg += `📝 *${expense.description || 'Expense'}*\n`;
-                    msg += `💰 Total: ₹${expense.totalAmount}\n`;
-                    msg += `👤 Paid by: ${payerName}\n`;
-                    msg += `📅 ${new Date().toLocaleString('en-IN', { timeZone: 'Asia/Kolkata' })}\n`;
-                    // Shared split
-                    if (parseFloat(expense.sharedAmount) > 0 && expense.sharedParticipants.length > 0) {
-                        msg += `\n📊 *Shared Split (₹${expense.sharedAmount}):*\n`;
-                        for (const p of expense.sharedParticipants) {
-                            const name = userMap.get(p.telegramUserId) || 'Unknown';
-                            msg += `  • ${name}: ₹${p.share}\n`;
-                        }
-                    }
-                    // Personal expenses
-                    if (expense.personalExpenses.length > 0) {
-                        msg += `\n🔒 *Personal Expenses:*\n`;
-                        for (const p of expense.personalExpenses) {
-                            const name = userMap.get(p.telegramUserId) || 'Unknown';
-                            msg += `  • ${name}: ₹${p.share}\n`;
-                        }
-                    }
-                    // Current balances
-                    const allExpenses = await Expense_1.default.find({ telegramChatId: chatId, status: 'CONFIRMED' });
-                    const allSettlements = await Settlement_1.default.find({ telegramChatId: chatId });
-                    const balances = LedgerService_1.LedgerService.calculateBalances(allExpenses, allSettlements);
-                    let hasBalances = false;
-                    let balanceText = `\n💳 *Current Balances:*\n`;
-                    for (const debtorStr in balances) {
-                        const debtorId = parseInt(debtorStr, 10);
-                        for (const creditorStr in balances[debtorStr]) {
-                            const creditorId = parseInt(creditorStr, 10);
-                            const amount = balances[debtorStr][creditorId];
-                            const debtorName = userMap.get(debtorId) || 'Unknown';
-                            const creditorName = userMap.get(creditorId) || 'Unknown';
-                            balanceText += `  • ${debtorName} ➜ ${creditorName}: ₹${amount}\n`;
-                            hasBalances = true;
-                        }
-                    }
-                    if (hasBalances) {
-                        msg += balanceText;
-                    }
-                    else {
-                        msg += `\n✅ *All settled up!* 🎉\n`;
-                    }
-                    await WhatsAppService_1.WhatsAppService.sendGroupMessage(process.env.WHATSAPP_GROUP_NAME, msg);
+                    const waMsg = msg.replace(/<b>/g, '*').replace(/<\/b>/g, '*');
+                    await WhatsAppService_1.WhatsAppService.sendGroupMessage(process.env.WHATSAPP_GROUP_NAME, waMsg);
                 }
             }
         }
@@ -296,7 +316,7 @@ class TelegramWebhookController {
                 return;
             }
             // Atomically add the user to approvedBy using $addToSet
-            const settlement = await Settlement_1.default.findOneAndUpdate({ _id: settlementId, status: 'PENDING_APPROVAL' }, { $addToSet: { approvedBy: targetUserId } }, { new: true });
+            const settlement = await Settlement_1.default.findOneAndUpdate({ _id: settlementId, status: 'PENDING_APPROVAL' }, { $addToSet: { approvedBy: targetUserId } }, { returnDocument: 'after' });
             if (!settlement) {
                 // Either it doesn't exist or it's already CONFIRMED
                 const checkSettlement = await Settlement_1.default.findById(settlementId);
@@ -320,7 +340,7 @@ class TelegramWebhookController {
             const debtorName = (await User_1.default.findOne({ telegramUserId: debtorId }))?.firstName || 'Debtor';
             const creditorName = (await User_1.default.findOne({ telegramUserId: creditorId }))?.firstName || 'Creditor';
             if (debtorApproved && creditorApproved) {
-                const confirmedSettlement = await Settlement_1.default.findOneAndUpdate({ _id: settlementId, status: 'PENDING_APPROVAL' }, { $set: { status: 'CONFIRMED' } }, { new: true });
+                const confirmedSettlement = await Settlement_1.default.findOneAndUpdate({ _id: settlementId, status: 'PENDING_APPROVAL' }, { $set: { status: 'CONFIRMED' } }, { returnDocument: 'after' });
                 if (confirmedSettlement) {
                     const msg = `✅ <b>Settlement Confirmed!</b>\n\n${debtorName} has settled ₹${settlement.amount} with ${creditorName}.`;
                     await TelegramService_1.TelegramService.sendMessage(chatId, msg);
@@ -344,15 +364,15 @@ class TelegramWebhookController {
         const balances = LedgerService_1.LedgerService.calculateBalances(expenses, settlements);
         let text = '<b>💰 Current Balances</b>\n\n';
         let hasBalances = false;
-        for (const debtorIdStr in balances) {
+        for (const debtorIdStr in balances.net) {
             const debtorId = parseInt(debtorIdStr, 10);
             const debtor = await User_1.default.findOne({ telegramUserId: debtorId });
             const debtorName = debtor?.firstName || debtor?.username || 'Unknown';
-            for (const creditorIdStr in balances[debtorId]) {
+            for (const creditorIdStr in balances.net[debtorId]) {
                 const creditorId = parseInt(creditorIdStr, 10);
                 const creditor = await User_1.default.findOne({ telegramUserId: creditorId });
                 const creditorName = creditor?.firstName || creditor?.username || 'Unknown';
-                const amount = balances[debtorId][creditorId];
+                const amount = balances.net[debtorId][creditorId];
                 text += `${debtorName} owes ${creditorName} ₹${amount}\n`;
                 hasBalances = true;
             }

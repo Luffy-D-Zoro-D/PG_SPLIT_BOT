@@ -38,8 +38,8 @@ class DashboardController {
             if (!groupIdStr)
                 return res.status(400).json({ error: 'groupId is required' });
             const groupId = parseInt(groupIdStr, 10);
-            const expenses = await Expense_1.default.find({ telegramChatId: groupId }).sort({ createdAt: -1 }).limit(50).lean();
-            const settlements = await Settlement_1.default.find({ telegramChatId: groupId }).sort({ createdAt: -1 }).limit(50).lean();
+            const expenses = await Expense_1.default.find({ telegramChatId: groupId, status: 'CONFIRMED' }).sort({ createdAt: -1 }).limit(50).lean();
+            const settlements = await Settlement_1.default.find({ telegramChatId: groupId, status: 'CONFIRMED' }).sort({ createdAt: -1 }).limit(50).lean();
             const userIds = new Set();
             expenses.forEach(e => {
                 userIds.add(e.paidByTelegramUserId);
@@ -85,11 +85,17 @@ class DashboardController {
             const groupId = parseInt(groupIdStr, 10);
             const expenses = await Expense_1.default.find({ telegramChatId: groupId, status: 'CONFIRMED' });
             const settlements = await Settlement_1.default.find({ telegramChatId: groupId });
-            const balances = LedgerService_1.LedgerService.calculateBalances(expenses, settlements);
+            const { net: netBalances, gross: grossBalances } = LedgerService_1.LedgerService.calculateBalances(expenses, settlements);
             const allUserIds = new Set();
-            for (const debtorIdStr in balances) {
+            for (const debtorIdStr in netBalances) {
                 allUserIds.add(parseInt(debtorIdStr));
-                for (const creditorIdStr in balances[debtorIdStr]) {
+                for (const creditorIdStr in netBalances[debtorIdStr]) {
+                    allUserIds.add(parseInt(creditorIdStr));
+                }
+            }
+            for (const debtorIdStr in grossBalances) {
+                allUserIds.add(parseInt(debtorIdStr));
+                for (const creditorIdStr in grossBalances[debtorIdStr]) {
                     allUserIds.add(parseInt(creditorIdStr));
                 }
             }
@@ -99,15 +105,20 @@ class DashboardController {
                 name: u.firstName || u.username || 'Unknown'
             }));
             const formattedBalances = [];
-            for (const debtorIdStr in balances) {
+            for (const debtorIdStr in netBalances) {
                 const debtorId = parseInt(debtorIdStr);
-                for (const creditorIdStr in balances[debtorIdStr]) {
+                for (const creditorIdStr in netBalances[debtorIdStr]) {
                     const creditorId = parseInt(creditorIdStr);
+                    const netAmount = netBalances[debtorIdStr][creditorIdStr];
+                    const grossDebtorToCreditor = grossBalances[debtorIdStr]?.[creditorIdStr] || '0.00';
+                    const grossCreditorToDebtor = grossBalances[creditorIdStr]?.[debtorIdStr] || '0.00';
                     formattedBalances.push({
                         id: `${debtorId}-${creditorId}`,
                         debtorName: userMap.get(debtorId)?.name || 'Unknown',
                         creditorName: userMap.get(creditorId)?.name || 'Unknown',
-                        amount: balances[debtorIdStr][creditorIdStr]
+                        amount: netAmount,
+                        grossDebtorToCreditor,
+                        grossCreditorToDebtor
                     });
                 }
             }

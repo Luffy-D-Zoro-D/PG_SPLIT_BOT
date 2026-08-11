@@ -27,6 +27,12 @@ app.get('/api/balances', DashboardController.getBalances);
 app.delete('/api/expenses/:id', DashboardController.deleteExpense);
 app.post('/api/settle', DashboardController.settleBalance);
 
+// Serve frontend static files in production
+app.use(express.static(path.join(__dirname, '../../frontend/dist')));
+app.get('*', (req, res) => {
+  res.sendFile(path.join(__dirname, '../../frontend/dist/index.html'));
+});
+
 const PORT = process.env.PORT || 3000;
 const MONGO_URI = process.env.MONGO_URI || 'mongodb://localhost:27017/pgsplitter';
 

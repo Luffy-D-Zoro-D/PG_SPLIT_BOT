@@ -44,11 +44,11 @@ async function runTests() {
             }
         ];
         const balances1 = LedgerService_1.LedgerService.calculateBalances(mockExpenses, mockSettlements);
-        assertEqual('PENDING_APPROVAL settlement does NOT affect ledger', balances1['2']['1'], '250.00');
+        assertEqual('PENDING_APPROVAL settlement does NOT affect ledger', balances1.net['2']['1'], '250.00');
         mockSettlements[0].status = 'CONFIRMED';
         const balances2 = LedgerService_1.LedgerService.calculateBalances(mockExpenses, mockSettlements);
         // 2 owed 1 250. 2 paid 1 300. So 1 owes 2 50.
-        assertEqual('CONFIRMED settlement affects ledger', balances2['1']['2'], '50.00');
+        assertEqual('CONFIRMED settlement affects ledger', balances2.net['1']['2'], '50.00');
     }
     catch (e) {
         console.error(e);

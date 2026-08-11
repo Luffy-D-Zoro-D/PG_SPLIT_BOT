@@ -35,7 +35,7 @@ var __importStar = (this && this.__importStar) || (function () {
 Object.defineProperty(exports, "__esModule", { value: true });
 const mongoose_1 = __importStar(require("mongoose"));
 const SettlementSchema = new mongoose_1.Schema({
-    telegramChatId: { type: Number, required: true },
+    telegramChatId: { type: Number, required: true, index: true },
     paidByTelegramUserId: { type: Number, required: true },
     paidToTelegramUserId: { type: Number, required: true },
     amount: { type: String, required: true },

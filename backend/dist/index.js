@@ -26,12 +26,18 @@ app.get('/api/expenses', DashboardController_1.DashboardController.getExpenses);
 app.get('/api/balances', DashboardController_1.DashboardController.getBalances);
 app.delete('/api/expenses/:id', DashboardController_1.DashboardController.deleteExpense);
 app.post('/api/settle', DashboardController_1.DashboardController.settleBalance);
+// Serve frontend static files in production
+app.use(express_1.default.static(path_1.default.join(__dirname, '../../frontend/dist')));
+app.get('*', (req, res) => {
+    res.sendFile(path_1.default.join(__dirname, '../../frontend/dist/index.html'));
+});
 const PORT = process.env.PORT || 3000;
 const MONGO_URI = process.env.MONGO_URI || 'mongodb://localhost:27017/pgsplitter';
 async function startServer() {
     try {
         await mongoose_1.default.connect(MONGO_URI);
         console.log('✅ Connected to MongoDB');
+        console.log('MongoDB URL:', MONGO_URI);
         app.listen(PORT, async () => {
             console.log(`🚀 Server running on port ${PORT}`);
             // Setup Webhook if URL is provided in env

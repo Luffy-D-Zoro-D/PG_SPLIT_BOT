@@ -124,17 +124,18 @@ class ExpenseService {
             sharedAmount: sharedAmount.toString(),
             sharedParticipants,
             personalExpenses: personalShares,
+            itemsBreakdown: extraction.itemsBreakdown || [],
             imageUrl: imageUrl
         });
         await expense.save();
         return expense;
     }
     static async confirmExpense(expenseId) {
-        const expense = await Expense_1.default.findOneAndUpdate({ _id: expenseId, status: Expense_1.ExpenseStatus.PENDING_CONFIRMATION }, { $set: { status: Expense_1.ExpenseStatus.CONFIRMED } }, { new: true });
+        const expense = await Expense_1.default.findOneAndUpdate({ _id: expenseId, status: Expense_1.ExpenseStatus.PENDING_CONFIRMATION }, { $set: { status: Expense_1.ExpenseStatus.CONFIRMED } }, { returnDocument: 'after' });
         return expense;
     }
     static async cancelExpense(expenseId) {
-        const expense = await Expense_1.default.findOneAndUpdate({ _id: expenseId, status: Expense_1.ExpenseStatus.PENDING_CONFIRMATION }, { $set: { status: Expense_1.ExpenseStatus.CANCELLED } }, { new: true });
+        const expense = await Expense_1.default.findOneAndUpdate({ _id: expenseId, status: Expense_1.ExpenseStatus.PENDING_CONFIRMATION }, { $set: { status: Expense_1.ExpenseStatus.CANCELLED } }, { returnDocument: 'after' });
         return expense;
     }
     static findMatchingUser(name, memberMap) {
