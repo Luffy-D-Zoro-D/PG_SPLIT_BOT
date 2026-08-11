@@ -11,7 +11,7 @@ const dotenv_1 = __importDefault(require("dotenv"));
 dotenv_1.default.config();
 const openai = new openai_1.default({
     apiKey: process.env.AI_API_KEY || 'fake_key_for_build',
-    baseURL: process.env.AI_BASE_URL || 'https://api.groq.com/openai/v1'
+    baseURL: process.env.AI_BASE_URL || 'https://api.com/openai/v1'
 });
 // Using zod to strictly type and validate the JSON output
 exports.ExpenseExtractionSchema = zod_1.z.object({

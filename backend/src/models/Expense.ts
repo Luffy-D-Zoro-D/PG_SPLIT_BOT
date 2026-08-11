@@ -20,6 +20,7 @@ export interface IExpense extends Document {
   sharedAmount: string;
   sharedParticipants: IParticipantShare[];
   personalExpenses: IParticipantShare[];
+  itemsBreakdown: string[];
   imageUrl?: string;
   createdAt: Date;
   updatedAt: Date;
@@ -39,6 +40,7 @@ const ExpenseSchema: Schema = new Schema({
   sharedAmount: { type: String, required: true },
   sharedParticipants: { type: [ParticipantShareSchema], default: [] },
   personalExpenses: { type: [ParticipantShareSchema], default: [] },
+  itemsBreakdown: { type: [String], default: [] },
   imageUrl: { type: String },
 }, {
   timestamps: true

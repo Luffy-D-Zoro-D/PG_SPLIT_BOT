@@ -175,6 +175,26 @@ export default function App() {
     );
   }
 
+  if (!stats) {
+    return (
+      <div className="min-h-screen bg-[#09090b] text-white flex items-center justify-center font-sans p-4">
+        <div className="text-center space-y-4">
+          <div className="w-16 h-16 bg-red-500/10 rounded-2xl flex items-center justify-center mx-auto mb-4">
+            <span className="text-2xl">⚠️</span>
+          </div>
+          <h1 className="text-xl font-bold">Cannot connect to backend server</h1>
+          <p className="text-neutral-400 max-w-sm">Make sure your backend is running on port 3000. It seems to have crashed or is unreachable.</p>
+          <button 
+            onClick={() => window.location.reload()}
+            className="px-6 py-2 bg-purple-600 hover:bg-purple-500 rounded-lg transition-colors mt-4"
+          >
+            Retry Connection
+          </button>
+        </div>
+      </div>
+    );
+  }
+
   return (
     <div className="min-h-screen bg-[#09090b] text-slate-200 font-sans selection:bg-purple-500/30 relative overflow-hidden">
       <Toaster 
@@ -225,6 +245,15 @@ export default function App() {
                   className="bg-white/5 border border-white/10 rounded-full py-2.5 pl-11 pr-4 text-sm focus:outline-none focus:ring-1 focus:ring-purple-500/50 focus:bg-white/10 transition-all w-72 placeholder:text-slate-500"
                 />
               </div>
+              <button
+                onClick={() => {
+                  localStorage.removeItem('pg_groupId');
+                  setGroupId('');
+                }}
+                className="text-xs font-medium bg-red-500/10 text-red-400 hover:bg-red-500/20 px-3 py-2 rounded-lg border border-red-500/20 transition-colors"
+              >
+                Switch Group
+              </button>
             </div>
           </div>
         </div>
@@ -289,8 +318,12 @@ export default function App() {
                             <Handshake className="w-6 h-6" />
                           </div>
                         ) : entry.imageUrl ? (
-                          <div className="w-14 h-14 rounded-xl overflow-hidden border border-white/10 shadow-lg shrink-0">
-                            <img src={`http://localhost:3000${entry.imageUrl}`} alt="Receipt" className="w-full h-full object-cover" />
+                          <div className="w-14 h-14 rounded-xl overflow-hidden border border-white/10 shadow-lg shrink-0 bg-slate-900 flex items-center justify-center">
+                            {/\.(mp3|wav|ogg|oga|m4a|aac)$/i.test(entry.imageUrl) ? (
+                               <Activity className="w-6 h-6 text-purple-400" />
+                            ) : (
+                               <img src={`http://localhost:3000${entry.imageUrl}`} alt="Receipt" className="w-full h-full object-cover" />
+                            )}
                           </div>
                         ) : (
                           <div className="w-14 h-14 rounded-xl bg-gradient-to-br from-slate-800 to-slate-900 border border-white/10 flex items-center justify-center text-xl font-heading font-bold text-slate-400 shadow-lg shrink-0 group-hover:text-white transition-colors">
@@ -304,11 +337,6 @@ export default function App() {
                                 ? `${entry.paidByName} settled with ${entry.paidToName}` 
                                 : (entry.description || 'General Expense')}
                             </h3>
-                            {entry.type === 'EXPENSE' && (
-                              <span className="px-2 py-0.5 rounded text-[10px] uppercase font-bold tracking-wider bg-purple-500/10 text-purple-400 border border-purple-500/20 flex items-center gap-1">
-                                <Sparkles className="w-3 h-3" /> AI
-                              </span>
-                            )}
                           </div>
                           <p className="text-sm text-slate-500">
                             {entry.type === 'SETTLEMENT' ? 'Settlement' : `Paid by `} 
@@ -388,6 +416,17 @@ export default function App() {
                         </div>
                       </div>
                       
+                      <div className="mb-4 pt-4 border-t border-white/5 space-y-1">
+                        <div className="flex justify-between text-xs text-slate-400">
+                          <span>{balance.creditorName} spent for {balance.debtorName}:</span>
+                          <span className="font-medium text-white">₹{balance.grossDebtorToCreditor}</span>
+                        </div>
+                        <div className="flex justify-between text-xs text-slate-400">
+                          <span>{balance.debtorName} spent for {balance.creditorName}:</span>
+                          <span className="font-medium text-white">₹{balance.grossCreditorToDebtor}</span>
+                        </div>
+                      </div>
+
                       <button
                         onClick={() => handleSettle(balance)}
                         className="w-full py-2.5 rounded-xl bg-purple-500/10 hover:bg-purple-500/20 text-purple-400 border border-purple-500/20 hover:border-purple-500/40 font-medium transition-all flex items-center justify-center gap-2"
@@ -465,17 +504,30 @@ export default function App() {
                 <X className="w-5 h-5" />
               </button>
 
-              {/* Left side: Image */}
+              {/* Left side: Media */}
               {selectedExpense.imageUrl && (
-                <div className="md:w-1/2 bg-black/50 p-6 flex items-center justify-center border-b md:border-b-0 md:border-r border-white/5 relative group">
-                  <div className="absolute inset-0 bg-gradient-to-t from-black/80 via-transparent to-transparent opacity-0 group-hover:opacity-100 transition-opacity flex items-end justify-center pb-6">
-                    <a href={`http://localhost:3000${selectedExpense.imageUrl}`} target="_blank" rel="noreferrer" className="px-4 py-2 bg-white/10 backdrop-blur-md rounded-full text-sm font-medium hover:bg-white/20 transition-colors text-white">View Original</a>
+                <div className="md:w-1/2 bg-black/50 p-6 flex flex-col items-center justify-center border-b md:border-b-0 md:border-r border-white/5 relative group">
+                  <div className="absolute inset-0 bg-gradient-to-t from-black/80 via-transparent to-transparent opacity-0 group-hover:opacity-100 transition-opacity flex items-end justify-center pb-6 z-10 pointer-events-none">
+                    <a href={`http://localhost:3000${selectedExpense.imageUrl}`} target="_blank" rel="noreferrer" className="px-4 py-2 bg-white/10 backdrop-blur-md rounded-full text-sm font-medium hover:bg-white/20 transition-colors text-white pointer-events-auto">View Original</a>
                   </div>
-                  <img 
-                    src={`http://localhost:3000${selectedExpense.imageUrl}`} 
-                    alt="Receipt" 
-                    className="max-w-full max-h-[60vh] object-contain rounded-xl shadow-2xl"
-                  />
+                  {/\.(mp3|wav|ogg|oga|m4a|aac)$/i.test(selectedExpense.imageUrl) ? (
+                    <div className="w-full flex flex-col items-center justify-center space-y-6">
+                      <div className="w-24 h-24 rounded-full bg-purple-500/10 flex items-center justify-center">
+                        <Activity className="w-12 h-12 text-purple-400" />
+                      </div>
+                      <audio 
+                        controls 
+                        src={`http://localhost:3000${selectedExpense.imageUrl}`} 
+                        className="w-full max-w-sm"
+                      />
+                    </div>
+                  ) : (
+                    <img 
+                      src={`http://localhost:3000${selectedExpense.imageUrl}`} 
+                      alt="Receipt" 
+                      className="max-w-full max-h-[60vh] object-contain rounded-xl shadow-2xl relative z-0"
+                    />
+                  )}
                 </div>
               )}
               
@@ -483,9 +535,6 @@ export default function App() {
               <div className={cn("p-8 md:p-10 flex flex-col bg-gradient-to-br from-[#09090b] to-slate-900/50", selectedExpense.imageUrl ? 'md:w-1/2' : 'w-full')}>
                 <div className="mb-8">
                   <div className="flex items-center gap-2 mb-3">
-                    <span className="px-2.5 py-1 rounded-md text-xs uppercase font-bold tracking-wider bg-purple-500/10 text-purple-400 border border-purple-500/20 flex items-center gap-1">
-                      <Sparkles className="w-3.5 h-3.5" /> AI Extracted
-                    </span>
                     <span className={cn("px-2.5 py-1 rounded-md text-xs font-bold uppercase tracking-wider border", 
                       selectedExpense.status === 'CONFIRMED' ? 'bg-emerald-500/10 text-emerald-400 border-emerald-500/20' :
                       selectedExpense.status === 'CANCELLED' ? 'bg-rose-500/10 text-rose-400 border-rose-500/20' :
@@ -526,6 +575,19 @@ export default function App() {
                           <div key={i} className="flex justify-between items-center p-3 rounded-xl bg-white/[0.02] border border-white/5">
                             <span className="text-slate-300">{p.name}</span>
                             <span className="font-medium text-white">₹{p.share}</span>
+                          </div>
+                        ))}
+                      </div>
+                    </div>
+                  )}
+
+                  {selectedExpense.itemsBreakdown && selectedExpense.itemsBreakdown.length > 0 && (
+                    <div>
+                      <h4 className="text-xs font-bold text-slate-500 uppercase tracking-widest mb-3">Itemized Breakdown</h4>
+                      <div className="space-y-2">
+                        {selectedExpense.itemsBreakdown.map((item: string, i: number) => (
+                          <div key={i} className="flex items-center p-3 rounded-xl bg-white/[0.02] border border-white/5">
+                            <span className="text-slate-300 text-sm">{item}</span>
                           </div>
                         ))}
                       </div>

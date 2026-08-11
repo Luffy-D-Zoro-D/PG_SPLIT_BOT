@@ -102,6 +102,7 @@ export class ExpenseService {
       sharedAmount: sharedAmount.toString(),
       sharedParticipants,
       personalExpenses: personalShares,
+      itemsBreakdown: extraction.itemsBreakdown || [],
       imageUrl: imageUrl
     });
 
@@ -114,7 +115,7 @@ export class ExpenseService {
     const expense = await Expense.findOneAndUpdate(
       { _id: expenseId, status: ExpenseStatus.PENDING_CONFIRMATION },
       { $set: { status: ExpenseStatus.CONFIRMED } },
-      { new: true }
+      { returnDocument: 'after' }
     );
     return expense;
   }
@@ -123,7 +124,7 @@ export class ExpenseService {
     const expense = await Expense.findOneAndUpdate(
       { _id: expenseId, status: ExpenseStatus.PENDING_CONFIRMATION },
       { $set: { status: ExpenseStatus.CANCELLED } },
-      { new: true }
+      { returnDocument: 'after' }
     );
     return expense;
   }

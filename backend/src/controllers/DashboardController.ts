@@ -37,8 +37,8 @@ export class DashboardController {
       if (!groupIdStr) return res.status(400).json({ error: 'groupId is required' });
       const groupId = parseInt(groupIdStr, 10);
 
-      const expenses = await Expense.find({ telegramChatId: groupId } as any).sort({ createdAt: -1 }).limit(50).lean();
-      const settlements = await Settlement.find({ telegramChatId: groupId } as any).sort({ createdAt: -1 }).limit(50).lean();
+      const expenses = await Expense.find({ telegramChatId: groupId, status: 'CONFIRMED' } as any).sort({ createdAt: -1 }).limit(50).lean();
+      const settlements = await Settlement.find({ telegramChatId: groupId, status: 'CONFIRMED' } as any).sort({ createdAt: -1 }).limit(50).lean();
       
       const userIds = new Set<number>();
       expenses.forEach(e => {
@@ -91,12 +91,18 @@ export class DashboardController {
       const expenses = await Expense.find({ telegramChatId: groupId, status: 'CONFIRMED' } as any);
       const settlements = await Settlement.find({ telegramChatId: groupId } as any);
       
-      const balances = LedgerService.calculateBalances(expenses, settlements);
+      const { net: netBalances, gross: grossBalances } = LedgerService.calculateBalances(expenses, settlements);
       
       const allUserIds = new Set<number>();
-      for (const debtorIdStr in balances) {
+      for (const debtorIdStr in netBalances) {
         allUserIds.add(parseInt(debtorIdStr));
-        for (const creditorIdStr in balances[debtorIdStr]) {
+        for (const creditorIdStr in netBalances[debtorIdStr]) {
+          allUserIds.add(parseInt(creditorIdStr));
+        }
+      }
+      for (const debtorIdStr in grossBalances) {
+        allUserIds.add(parseInt(debtorIdStr));
+        for (const creditorIdStr in grossBalances[debtorIdStr]) {
           allUserIds.add(parseInt(creditorIdStr));
         }
       }
@@ -108,15 +114,21 @@ export class DashboardController {
       }));
       
       const formattedBalances: any[] = [];
-      for (const debtorIdStr in balances) {
+      for (const debtorIdStr in netBalances) {
         const debtorId = parseInt(debtorIdStr);
-        for (const creditorIdStr in balances[debtorIdStr]) {
+        for (const creditorIdStr in netBalances[debtorIdStr]) {
           const creditorId = parseInt(creditorIdStr);
+          const netAmount = netBalances[debtorIdStr][creditorIdStr];
+          const grossDebtorToCreditor = grossBalances[debtorIdStr]?.[creditorIdStr] || '0.00';
+          const grossCreditorToDebtor = grossBalances[creditorIdStr]?.[debtorIdStr] || '0.00';
+
           formattedBalances.push({
             id: `${debtorId}-${creditorId}`,
             debtorName: userMap.get(debtorId)?.name || 'Unknown',
             creditorName: userMap.get(creditorId)?.name || 'Unknown',
-            amount: balances[debtorIdStr][creditorIdStr]
+            amount: netAmount,
+            grossDebtorToCreditor,
+            grossCreditorToDebtor
           });
         }
       }
