@@ -1,4 +1,4 @@
-# Build Frontend
+# Build Frontend (v2 - Node 22)
 FROM node:22-bookworm AS frontend-build
 WORKDIR /app/frontend
 COPY frontend/package*.json ./
