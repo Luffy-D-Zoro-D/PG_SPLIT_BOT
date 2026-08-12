@@ -93,10 +93,11 @@ function startServer() {
 
   // Setup Telegram Webhook if URL is provided in env. Fire-and-forget, does not block startup.
   if (process.env.WEBHOOK_URL) {
-    TelegramService.setWebhook(`${process.env.WEBHOOK_URL}/webhook/telegram`)
+    const baseUrl = process.env.WEBHOOK_URL.replace(/\/+$/, '');
+    TelegramService.setWebhook(`${baseUrl}/webhook/telegram`)
       .then((success) => {
         if (success) {
-          console.log(`✅ Telegram Webhook set to ${process.env.WEBHOOK_URL}/webhook/telegram`);
+          console.log(`✅ Telegram Webhook set to ${baseUrl}/webhook/telegram`);
         } else {
           console.error('❌ Failed to set Telegram Webhook');
         }
