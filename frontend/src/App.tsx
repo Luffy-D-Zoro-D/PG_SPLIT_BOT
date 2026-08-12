@@ -123,8 +123,12 @@ export default function App() {
   useEffect(() => {
     if (selectedExpense && selectedExpense.createdAt) {
       const d = new Date(selectedExpense.createdAt);
-      const localIso = new Date(d.getTime() - d.getTimezoneOffset() * 60000).toISOString().slice(0, 16);
-      setEditDateValue(localIso);
+      const year = d.getFullYear();
+      const month = String(d.getMonth() + 1).padStart(2, '0');
+      const day = String(d.getDate()).padStart(2, '0');
+      const hours = String(d.getHours()).padStart(2, '0');
+      const minutes = String(d.getMinutes()).padStart(2, '0');
+      setEditDateValue(`${year}-${month}-${day}T${hours}:${minutes}`);
       setEditImageFile(null);
     }
   }, [selectedExpense]);

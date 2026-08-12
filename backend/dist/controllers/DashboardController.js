@@ -226,7 +226,7 @@ class DashboardController {
                 updateFields.description = description;
             if (totalAmount !== undefined)
                 updateFields.totalAmount = totalAmount.toString();
-            const expense = await Expense_1.default.findByIdAndUpdate(id, { $set: updateFields }, { new: true });
+            const expense = await Expense_1.default.findByIdAndUpdate(id, { $set: updateFields }, { new: true, timestamps: false });
             if (!expense)
                 return res.status(404).json({ error: 'Expense not found' });
             res.json({ success: true, expense });
