@@ -72,7 +72,9 @@ export class TelegramWebhookController {
         const localPath = await TelegramService.downloadFile(telegramFilePath, destPath);
 
         if (localPath) {
-          imageUrl = `/uploads/${destName}`;
+          const fileBuffer = fs.readFileSync(localPath);
+          imageUrl = `data:image/jpeg;base64,${fileBuffer.toString('base64')}`;
+          try { fs.unlinkSync(localPath); } catch (e) {}
         }
       }
 
@@ -95,7 +97,10 @@ export class TelegramWebhookController {
         if (localPath) {
           try {
             text = await AIService.transcribeAudio(localPath);
-            imageUrl = `/uploads/${destName}`; // Save the audio URL just like images
+            const audioBuffer = fs.readFileSync(localPath);
+            const mimeType = fileExt === '.ogg' ? 'audio/ogg' : 'audio/mp3';
+            imageUrl = `data:${mimeType};base64,${audioBuffer.toString('base64')}`;
+            try { fs.unlinkSync(localPath); } catch (e) {}
           } catch (e) {
             await TelegramService.sendMessage(chatId, '❌ Failed to understand the audio.');
             return;

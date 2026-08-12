@@ -82,7 +82,7 @@ export class WhatsAppService {
     }
   }
 
-  private static notificationsEnabled: boolean = process.env.ENABLE_WHATSAPP !== 'false';
+  private static notificationsEnabled: boolean = process.env.ENABLE_WHATSAPP === 'true';
 
   static getQRCode(): string | null {
     return this.qrCode;

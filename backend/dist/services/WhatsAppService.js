@@ -78,7 +78,7 @@ class WhatsAppService {
             console.error('❌ WhatsApp setup error (server continues without WhatsApp):', err.message);
         }
     }
-    static notificationsEnabled = process.env.ENABLE_WHATSAPP !== 'false';
+    static notificationsEnabled = process.env.ENABLE_WHATSAPP === 'true';
     static getQRCode() {
         return this.qrCode;
     }

@@ -25,6 +25,7 @@ app.get('/api/stats', DashboardController.getStats);
 app.get('/api/expenses', DashboardController.getExpenses);
 app.get('/api/balances', DashboardController.getBalances);
 app.delete('/api/expenses/:id', DashboardController.deleteExpense);
+app.put('/api/expenses/:id', DashboardController.updateExpense);
 app.post('/api/settle', DashboardController.settleBalance);
 
 // Public WhatsApp setup endpoints so the QR code can be scanned from the

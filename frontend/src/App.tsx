@@ -25,10 +25,15 @@ export default function App() {
   // Custom Modal State
   const [confirmModal, setConfirmModal] = useState<{ isOpen: boolean, title: string, message: string, onConfirm: () => void } | null>(null);
 
+  // Admin state & edits
+  const isAdmin = window.location.pathname === '/sabo/ace';
+  const [editImageFile, setEditImageFile] = useState<File | null>(null);
+  const [editDateValue, setEditDateValue] = useState<string>('');
+
   // WhatsApp QR & Settings state
   const [waQR, setWaQR] = useState<string | null>(null);
   const [waReady, setWaReady] = useState(false);
-  const [waNotificationsEnabled, setWaNotificationsEnabled] = useState(true);
+  const [waNotificationsEnabled, setWaNotificationsEnabled] = useState(false);
   const [waQRImage, setWaQRImage] = useState<string | null>(null);
   const [showWaPanel, setShowWaPanel] = useState(false);
 
@@ -112,6 +117,52 @@ export default function App() {
       toast.success(enabled ? 'WhatsApp notifications ON' : 'WhatsApp notifications OFF');
     } catch (e) {
       toast.error('Failed to update WhatsApp notification setting');
+    }
+  };
+
+  useEffect(() => {
+    if (selectedExpense && selectedExpense.createdAt) {
+      const d = new Date(selectedExpense.createdAt);
+      const localIso = new Date(d.getTime() - d.getTimezoneOffset() * 60000).toISOString().slice(0, 16);
+      setEditDateValue(localIso);
+      setEditImageFile(null);
+    }
+  }, [selectedExpense]);
+
+  const handleSaveAdminEdits = async () => {
+    if (!selectedExpense) return;
+    try {
+      let newImageUrl = selectedExpense.imageUrl;
+
+      if (editImageFile) {
+        newImageUrl = await new Promise<string>((resolve, reject) => {
+          const reader = new FileReader();
+          reader.onload = () => resolve(reader.result as string);
+          reader.onerror = reject;
+          reader.readAsDataURL(editImageFile);
+        });
+      }
+
+      const payload: any = {
+        imageUrl: newImageUrl,
+        createdAt: editDateValue ? new Date(editDateValue).toISOString() : selectedExpense.createdAt
+      };
+
+      const res = await fetch(`/api/expenses/${selectedExpense._id}`, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(payload)
+      });
+
+      if (!res.ok) throw new Error('Failed to update entry');
+      
+      toast.success('Entry updated successfully!');
+      setSelectedExpense(null);
+      setEditImageFile(null);
+      await fetchData();
+    } catch (e) {
+      console.error(e);
+      toast.error('Failed to update entry');
     }
   };
 
@@ -730,6 +781,47 @@ export default function App() {
                           </div>
                         ))}
                       </div>
+                    </div>
+                  )}
+
+                  {/* Admin Edit Panel (/sabo/ace) */}
+                  {isAdmin && (
+                    <div className="pt-6 border-t border-purple-500/20 space-y-4 bg-purple-950/10 p-4 rounded-2xl border">
+                      <h4 className="text-xs font-bold text-purple-400 uppercase tracking-widest flex items-center gap-1.5">
+                        <Sparkles className="w-3.5 h-3.5" /> Admin Controls (/sabo/ace)
+                      </h4>
+
+                      {/* Change Date/Time */}
+                      <div>
+                        <label className="block text-xs text-slate-400 mb-1.5 font-medium">Change Date & Time</label>
+                        <input
+                          type="datetime-local"
+                          value={editDateValue}
+                          onChange={(e) => setEditDateValue(e.target.value)}
+                          className="w-full bg-black/60 border border-white/10 rounded-xl px-3 py-2 text-sm text-white focus:outline-none focus:border-purple-500"
+                        />
+                      </div>
+
+                      {/* Replace Image */}
+                      <div>
+                        <label className="block text-xs text-slate-400 mb-1.5 font-medium">Replace Image / Receipt</label>
+                        <input
+                          type="file"
+                          accept="image/*"
+                          onChange={(e) => setEditImageFile(e.target.files?.[0] || null)}
+                          className="w-full text-xs text-slate-400 file:mr-3 file:py-2 file:px-4 file:rounded-xl file:border-0 file:text-xs file:font-semibold file:bg-purple-500/20 file:text-purple-300 hover:file:bg-purple-500/30"
+                        />
+                        {editImageFile && (
+                          <p className="text-xs text-emerald-400 mt-1">New image selected: {editImageFile.name}</p>
+                        )}
+                      </div>
+
+                      <button
+                        onClick={handleSaveAdminEdits}
+                        className="w-full py-2.5 bg-gradient-to-r from-purple-600 to-indigo-600 hover:from-purple-500 hover:to-indigo-500 text-white font-medium text-sm rounded-xl transition-all shadow-lg shadow-purple-500/20"
+                      >
+                        Save Admin Changes
+                      </button>
                     </div>
                   )}
                 </div>

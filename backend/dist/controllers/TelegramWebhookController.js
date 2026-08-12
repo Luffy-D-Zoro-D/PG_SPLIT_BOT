@@ -14,6 +14,7 @@ const LedgerService_1 = require("../services/LedgerService");
 const AIService_1 = require("../services/AIService");
 const WhatsAppService_1 = require("../services/WhatsAppService");
 const axios_1 = __importDefault(require("axios"));
+const fs_1 = __importDefault(require("fs"));
 const path_1 = __importDefault(require("path"));
 const ProcessedUpdate_1 = __importDefault(require("../models/ProcessedUpdate"));
 const chatHistories = new Map();
@@ -67,7 +68,12 @@ class TelegramWebhookController {
                 const destPath = path_1.default.join(process.cwd(), 'uploads', destName);
                 const localPath = await TelegramService_1.TelegramService.downloadFile(telegramFilePath, destPath);
                 if (localPath) {
-                    imageUrl = `/uploads/${destName}`;
+                    const fileBuffer = fs_1.default.readFileSync(localPath);
+                    imageUrl = `data:image/jpeg;base64,${fileBuffer.toString('base64')}`;
+                    try {
+                        fs_1.default.unlinkSync(localPath);
+                    }
+                    catch (e) { }
                 }
             }
             if (!text) {
@@ -86,7 +92,13 @@ class TelegramWebhookController {
                 if (localPath) {
                     try {
                         text = await AIService_1.AIService.transcribeAudio(localPath);
-                        imageUrl = `/uploads/${destName}`; // Save the audio URL just like images
+                        const audioBuffer = fs_1.default.readFileSync(localPath);
+                        const mimeType = fileExt === '.ogg' ? 'audio/ogg' : 'audio/mp3';
+                        imageUrl = `data:${mimeType};base64,${audioBuffer.toString('base64')}`;
+                        try {
+                            fs_1.default.unlinkSync(localPath);
+                        }
+                        catch (e) { }
                     }
                     catch (e) {
                         await TelegramService_1.TelegramService.sendMessage(chatId, '❌ Failed to understand the audio.');

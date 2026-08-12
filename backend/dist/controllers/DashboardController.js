@@ -213,5 +213,28 @@ class DashboardController {
             res.status(500).json({ error: 'Failed to settle balance' });
         }
     }
+    static async updateExpense(req, res) {
+        try {
+            const { id } = req.params;
+            const { imageUrl, createdAt, description, totalAmount } = req.body;
+            const expense = await Expense_1.default.findById(id);
+            if (!expense)
+                return res.status(404).json({ error: 'Expense not found' });
+            if (imageUrl !== undefined)
+                expense.imageUrl = imageUrl;
+            if (createdAt !== undefined)
+                expense.createdAt = new Date(createdAt);
+            if (description !== undefined)
+                expense.description = description;
+            if (totalAmount !== undefined)
+                expense.totalAmount = totalAmount.toString();
+            await expense.save();
+            res.json({ success: true, expense });
+        }
+        catch (e) {
+            console.error(e);
+            res.status(500).json({ error: 'Failed to update expense' });
+        }
+    }
 }
 exports.DashboardController = DashboardController;
