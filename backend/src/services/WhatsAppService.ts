@@ -82,6 +82,8 @@ export class WhatsAppService {
     }
   }
 
+  private static notificationsEnabled: boolean = process.env.ENABLE_WHATSAPP !== 'false';
+
   static getQRCode(): string | null {
     return this.qrCode;
   }
@@ -90,7 +92,21 @@ export class WhatsAppService {
     return this.isReady;
   }
 
+  static getNotificationsEnabled(): boolean {
+    return this.notificationsEnabled;
+  }
+
+  static setNotificationsEnabled(enabled: boolean): void {
+    this.notificationsEnabled = enabled;
+    console.log(`📱 WhatsApp notifications enabled: ${enabled}`);
+  }
+
   static async sendGroupMessage(groupName: string, text: string): Promise<boolean> {
+    if (!this.notificationsEnabled) {
+      console.log('ℹ️ WhatsApp notifications are disabled. Skipping message.');
+      return false;
+    }
+
     if (!this.client || !this.isReady) {
       console.warn('⚠️ WhatsApp client is not ready. Message not sent.');
       return false;

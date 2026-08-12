@@ -44,7 +44,25 @@ app.get('/api/whatsapp-status', (req, res) => {
   const isReady = WhatsAppService.getIsReady();
   const needsAuth = !isReady && !!WhatsAppService.getQRCode();
 
-  res.send({ isReady, needsAuth });
+  res.send({ isReady, needsAuth, notificationsEnabled: WhatsAppService.getNotificationsEnabled() });
+});
+
+app.get('/api/whatsapp-settings', (req, res) => {
+  res.send({
+    notificationsEnabled: WhatsAppService.getNotificationsEnabled(),
+    isReady: WhatsAppService.getIsReady()
+  });
+});
+
+app.post('/api/whatsapp-settings', (req, res) => {
+  const { notificationsEnabled } = req.body;
+  if (typeof notificationsEnabled === 'boolean') {
+    WhatsAppService.setNotificationsEnabled(notificationsEnabled);
+  }
+  res.send({
+    notificationsEnabled: WhatsAppService.getNotificationsEnabled(),
+    isReady: WhatsAppService.getIsReady()
+  });
 });
 
 // Serve frontend static files in production

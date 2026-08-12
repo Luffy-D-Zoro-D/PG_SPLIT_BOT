@@ -25,9 +25,10 @@ export default function App() {
   // Custom Modal State
   const [confirmModal, setConfirmModal] = useState<{ isOpen: boolean, title: string, message: string, onConfirm: () => void } | null>(null);
 
-  // WhatsApp QR state
+  // WhatsApp QR & Settings state
   const [waQR, setWaQR] = useState<string | null>(null);
   const [waReady, setWaReady] = useState(false);
+  const [waNotificationsEnabled, setWaNotificationsEnabled] = useState(true);
   const [waQRImage, setWaQRImage] = useState<string | null>(null);
   const [showWaPanel, setShowWaPanel] = useState(false);
 
@@ -70,21 +71,24 @@ export default function App() {
 
   // Poll WhatsApp status & QR code
   useEffect(() => {
-    if (waReady) return; // Stop polling once connected
-
     const pollWA = async () => {
       try {
-        const res = await fetch('/api/whatsapp-qr');
+        const res = await fetch('/api/whatsapp-status');
         const data = await res.json();
-        if (data.status === 'authenticated') {
+        if (data.notificationsEnabled !== undefined) {
+          setWaNotificationsEnabled(data.notificationsEnabled);
+        }
+        if (data.isReady) {
           setWaReady(true);
           setWaQR(null);
           setWaQRImage(null);
           return;
         }
-        if (data.qr && data.qr !== waQR) {
-          setWaQR(data.qr);
-          const dataUrl = await QRCode.toDataURL(data.qr, { width: 256, margin: 1 });
+        const qrRes = await fetch('/api/whatsapp-qr');
+        const qrData = await qrRes.json();
+        if (qrData.qr && qrData.qr !== waQR) {
+          setWaQR(qrData.qr);
+          const dataUrl = await QRCode.toDataURL(qrData.qr, { width: 256, margin: 1 });
           setWaQRImage(dataUrl);
         }
       } catch (e) {
@@ -93,9 +97,23 @@ export default function App() {
     };
 
     pollWA();
-    const interval = setInterval(pollWA, 3000);
+    const interval = setInterval(pollWA, 4000);
     return () => clearInterval(interval);
   }, [waReady, waQR]);
+
+  const toggleWaNotifications = async (enabled: boolean) => {
+    setWaNotificationsEnabled(enabled);
+    try {
+      await fetch('/api/whatsapp-settings', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ notificationsEnabled: enabled })
+      });
+      toast.success(enabled ? 'WhatsApp notifications ON' : 'WhatsApp notifications OFF');
+    } catch (e) {
+      toast.error('Failed to update WhatsApp notification setting');
+    }
+  };
 
   const handleDeleteExpense = (id: string) => {
     setConfirmModal({
@@ -272,6 +290,25 @@ export default function App() {
             </div>
             
             <div className="hidden md:flex items-center space-x-4">
+              {/* WhatsApp Notification Toggle */}
+              <div className="flex items-center space-x-2 bg-white/5 border border-white/10 px-3.5 py-2 rounded-full">
+                <MessageCircle className={cn("w-4 h-4", waNotificationsEnabled ? "text-emerald-400" : "text-slate-500")} />
+                <span className="text-xs text-slate-300 font-medium">WhatsApp Alerts</span>
+                <button
+                  onClick={() => toggleWaNotifications(!waNotificationsEnabled)}
+                  className={cn(
+                    "w-8 h-4 rounded-full transition-colors relative p-0.5 cursor-pointer",
+                    waNotificationsEnabled ? "bg-emerald-500" : "bg-slate-700"
+                  )}
+                  title={waNotificationsEnabled ? "Disable WhatsApp Notifications" : "Enable WhatsApp Notifications"}
+                >
+                  <div className={cn(
+                    "w-3 h-3 rounded-full bg-white transition-transform shadow-md",
+                    waNotificationsEnabled ? "translate-x-4" : "translate-x-0"
+                  )} />
+                </button>
+              </div>
+
               <div className="relative group">
                 <Search className="w-4 h-4 text-slate-500 absolute left-4 top-1/2 -translate-y-1/2 group-focus-within:text-purple-400 transition-colors" />
                 <input 

@@ -78,13 +78,25 @@ class WhatsAppService {
             console.error('❌ WhatsApp setup error (server continues without WhatsApp):', err.message);
         }
     }
+    static notificationsEnabled = process.env.ENABLE_WHATSAPP !== 'false';
     static getQRCode() {
         return this.qrCode;
     }
     static getIsReady() {
         return this.isReady;
     }
+    static getNotificationsEnabled() {
+        return this.notificationsEnabled;
+    }
+    static setNotificationsEnabled(enabled) {
+        this.notificationsEnabled = enabled;
+        console.log(`📱 WhatsApp notifications enabled: ${enabled}`);
+    }
     static async sendGroupMessage(groupName, text) {
+        if (!this.notificationsEnabled) {
+            console.log('ℹ️ WhatsApp notifications are disabled. Skipping message.');
+            return false;
+        }
         if (!this.client || !this.isReady) {
             console.warn('⚠️ WhatsApp client is not ready. Message not sent.');
             return false;
