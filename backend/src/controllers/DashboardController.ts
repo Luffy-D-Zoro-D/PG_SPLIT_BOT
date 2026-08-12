@@ -7,17 +7,34 @@ import { LedgerService } from '../services/LedgerService';
 
 export class DashboardController {
   
+  private static getDateFilter(range?: string) {
+    if (range === 'week') {
+      const now = new Date();
+      const startOfWeek = new Date(now.setDate(now.getDate() - now.getDay()));
+      startOfWeek.setHours(0, 0, 0, 0);
+      return { createdAt: { $gte: startOfWeek } };
+    } else if (range === 'month') {
+      const now = new Date();
+      const startOfMonth = new Date(now.getFullYear(), now.getMonth(), 1);
+      return { createdAt: { $gte: startOfMonth } };
+    }
+    return {};
+  }
+
   static async getStats(req: Request, res: Response) {
     try {
       const groupIdStr = req.query.groupId as string;
+      const range = req.query.range as string;
       if (!groupIdStr) return res.status(400).json({ error: 'groupId is required' });
       const groupId = parseInt(groupIdStr, 10);
+      const dateFilter = DashboardController.getDateFilter(range);
 
-      const expensesCount = await Expense.countDocuments({ telegramChatId: groupId } as any);
-      const groupsCount = await Group.countDocuments(); // This might remain global or just 1
+      const expensesQuery = { telegramChatId: groupId, status: 'CONFIRMED', ...dateFilter };
+      const expensesCount = await Expense.countDocuments(expensesQuery as any);
+      const groupsCount = await Group.countDocuments();
       const usersCount = await User.countDocuments();
       
-      const allExpenses = await Expense.find({ telegramChatId: groupId, status: 'CONFIRMED' } as any);
+      const allExpenses = await Expense.find(expensesQuery as any);
       const totalAmountRecorded = allExpenses.reduce((acc, curr) => acc + parseFloat(curr.totalAmount), 0);
       
       res.json({
@@ -34,11 +51,13 @@ export class DashboardController {
   static async getExpenses(req: Request, res: Response) {
     try {
       const groupIdStr = req.query.groupId as string;
+      const range = req.query.range as string;
       if (!groupIdStr) return res.status(400).json({ error: 'groupId is required' });
       const groupId = parseInt(groupIdStr, 10);
+      const dateFilter = DashboardController.getDateFilter(range);
 
-      const expenses = await Expense.find({ telegramChatId: groupId, status: 'CONFIRMED' } as any).sort({ createdAt: -1 }).limit(50).lean();
-      const settlements = await Settlement.find({ telegramChatId: groupId, status: 'CONFIRMED' } as any).sort({ createdAt: -1 }).limit(50).lean();
+      const expenses = await Expense.find({ telegramChatId: groupId, status: 'CONFIRMED', ...dateFilter } as any).sort({ createdAt: -1 }).limit(50).lean();
+      const settlements = await Settlement.find({ telegramChatId: groupId, status: { $in: ['CONFIRMED', 'PENDING_APPROVAL'] }, ...dateFilter } as any).sort({ createdAt: -1 }).limit(50).lean();
       
       const userIds = new Set<number>();
       expenses.forEach(e => {
@@ -85,11 +104,13 @@ export class DashboardController {
   static async getBalances(req: Request, res: Response) {
     try {
       const groupIdStr = req.query.groupId as string;
+      const range = req.query.range as string;
       if (!groupIdStr) return res.status(400).json({ error: 'groupId is required' });
       const groupId = parseInt(groupIdStr, 10);
+      const dateFilter = DashboardController.getDateFilter(range);
 
-      const expenses = await Expense.find({ telegramChatId: groupId, status: 'CONFIRMED' } as any);
-      const settlements = await Settlement.find({ telegramChatId: groupId } as any);
+      const expenses = await Expense.find({ telegramChatId: groupId, status: 'CONFIRMED', ...dateFilter } as any);
+      const settlements = await Settlement.find({ telegramChatId: groupId, ...dateFilter } as any);
       
       const { net: netBalances, gross: grossBalances } = LedgerService.calculateBalances(expenses, settlements);
       

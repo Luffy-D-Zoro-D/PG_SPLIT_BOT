@@ -20,6 +20,7 @@ export default function App() {
   // Search & Filter state
   const [searchQuery, setSearchQuery] = useState('');
   const [groupId, setGroupId] = useState<string>(localStorage.getItem('pg_groupId') || '');
+  const [timeRange, setTimeRange] = useState<'all' | 'month' | 'week'>('all');
   
   // Custom Modal State
   const [confirmModal, setConfirmModal] = useState<{ isOpen: boolean, title: string, message: string, onConfirm: () => void } | null>(null);
@@ -37,9 +38,9 @@ export default function App() {
     }
     try {
       const [statsRes, expensesRes, balancesRes] = await Promise.all([
-        fetch(`/api/stats?groupId=${groupId}`).then(r => r.json()),
-        fetch(`/api/expenses?groupId=${groupId}`).then(r => r.json()),
-        fetch(`/api/balances?groupId=${groupId}`).then(r => r.json())
+        fetch(`/api/stats?groupId=${groupId}&range=${timeRange}`).then(r => r.json()),
+        fetch(`/api/expenses?groupId=${groupId}&range=${timeRange}`).then(r => r.json()),
+        fetch(`/api/balances?groupId=${groupId}&range=${timeRange}`).then(r => r.json())
       ]);
       
       if (statsRes.error) throw new Error(statsRes.error);
@@ -65,7 +66,7 @@ export default function App() {
     } else {
       setLoading(false);
     }
-  }, [groupId]);
+  }, [groupId, timeRange]);
 
   // Poll WhatsApp status & QR code
   useEffect(() => {
@@ -337,8 +338,29 @@ export default function App() {
         </div>
       )}
 
-      <main className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-10 space-y-10 relative z-10">
+      <main className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-10 space-y-8 relative z-10">
         
+        {/* Time Range Filter Bar */}
+        <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center bg-white/[0.02] border border-white/5 p-3 rounded-2xl gap-3">
+          <div className="flex items-center space-x-2">
+            <span className="text-xs text-slate-400 font-semibold px-2 uppercase tracking-wider">Filter Timeframe:</span>
+            {(['all', 'month', 'week'] as const).map((range) => (
+              <button
+                key={range}
+                onClick={() => setTimeRange(range)}
+                className={cn(
+                  "px-4 py-1.5 rounded-xl text-xs font-medium transition-all capitalize",
+                  timeRange === range
+                    ? "bg-purple-600/30 text-purple-300 border border-purple-500/40 shadow-lg shadow-purple-500/10"
+                    : "text-slate-400 hover:text-white hover:bg-white/5 border border-transparent"
+                )}
+              >
+                {range === 'all' ? 'All Time' : range === 'month' ? 'This Month' : 'This Week'}
+              </button>
+            ))}
+          </div>
+        </div>
+
         {/* Metrics Row */}
         <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
           <MetricCard 
@@ -435,7 +457,9 @@ export default function App() {
                             entry.status === 'CANCELLED' ? 'text-rose-400' :
                             'text-amber-400 animate-pulse'
                           )}>
-                            {entry.status}
+                            {entry.type === 'SETTLEMENT' 
+                              ? (entry.status === 'CONFIRMED' ? 'SETTLED' : 'APPROVAL PENDING')
+                              : entry.status}
                           </p>
                         </div>
                         {window.location.pathname === '/sabo/ace' && entry.type === 'EXPENSE' && (

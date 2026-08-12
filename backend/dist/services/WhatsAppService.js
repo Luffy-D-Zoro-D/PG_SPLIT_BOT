@@ -7,19 +7,43 @@ exports.WhatsAppService = void 0;
 const whatsapp_web_js_1 = require("whatsapp-web.js");
 const qrcode_terminal_1 = __importDefault(require("qrcode-terminal"));
 const dotenv_1 = __importDefault(require("dotenv"));
+const fs_1 = __importDefault(require("fs"));
 dotenv_1.default.config();
+// Railway mounts a persistent volume at this path so the WhatsApp session
+// survives across deployments/restarts, avoiding a re-scan of the QR code.
+const WHATSAPP_AUTH_PATH = process.env.WHATSAPP_AUTH_PATH || '/app/whatsapp-auth';
 class WhatsAppService {
     static client = null;
     static isReady = false;
+    static qrCode = null;
     static initialize() {
         console.log('Initializing WhatsApp Client...');
         try {
-            // We use LocalAuth to save session data so we don't need to scan QR code every time
+            // Make sure the persistent volume directory exists before LocalAuth tries to use it.
+            try {
+                fs_1.default.mkdirSync(WHATSAPP_AUTH_PATH, { recursive: true });
+            }
+            catch (mkdirErr) {
+                console.error('❌ Failed to ensure WhatsApp auth directory exists (continuing anyway):', mkdirErr.message);
+            }
+            // We use LocalAuth pointed at the persistent volume so the session survives
+            // container restarts/redeploys and we don't need to scan the QR code every time.
             this.client = new whatsapp_web_js_1.Client({
-                authStrategy: new whatsapp_web_js_1.LocalAuth(),
+                authStrategy: new whatsapp_web_js_1.LocalAuth({
+                    clientId: 'PG_SPLIT_BOT',
+                    dataPath: WHATSAPP_AUTH_PATH
+                }),
                 puppeteer: {
-                    args: ['--no-sandbox', '--disable-setuid-sandbox'],
-                    executablePath: process.env.PUPPETEER_EXECUTABLE_PATH || undefined
+                    args: [
+                        '--no-sandbox',
+                        '--disable-setuid-sandbox',
+                        '--disable-dev-shm-usage',
+                        '--disable-gpu',
+                        '--no-zygote',
+                        '--single-process'
+                    ],
+                    executablePath: process.env.PUPPETEER_EXECUTABLE_PATH || undefined,
+                    protocolTimeout: 120000, // 120s instead of default 30s
                 },
                 webVersionCache: {
                     type: 'none'
@@ -31,9 +55,11 @@ class WhatsAppService {
                 console.log('Scan the QR Code below with your WhatsApp:');
                 console.log('==========================================');
                 qrcode_terminal_1.default.generate(qr, { small: true });
+                this.qrCode = qr;
             });
             this.client.on('ready', () => {
                 this.isReady = true;
+                this.qrCode = null;
                 console.log('✅ WhatsApp Client is READY!');
             });
             this.client.on('disconnected', (reason) => {
@@ -51,6 +77,12 @@ class WhatsAppService {
         catch (err) {
             console.error('❌ WhatsApp setup error (server continues without WhatsApp):', err.message);
         }
+    }
+    static getQRCode() {
+        return this.qrCode;
+    }
+    static getIsReady() {
+        return this.isReady;
     }
     static async sendGroupMessage(groupName, text) {
         if (!this.client || !this.isReady) {

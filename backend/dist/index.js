@@ -26,6 +26,21 @@ app.get('/api/expenses', DashboardController_1.DashboardController.getExpenses);
 app.get('/api/balances', DashboardController_1.DashboardController.getBalances);
 app.delete('/api/expenses/:id', DashboardController_1.DashboardController.deleteExpense);
 app.post('/api/settle', DashboardController_1.DashboardController.settleBalance);
+// Public WhatsApp setup endpoints so the QR code can be scanned from the
+// dashboard instead of the server console/logs.
+app.get('/api/whatsapp-qr', (req, res) => {
+    const isReady = WhatsAppService_1.WhatsAppService.getIsReady();
+    const qr = WhatsAppService_1.WhatsAppService.getQRCode();
+    if (isReady) {
+        return res.send({ qr: null, status: 'authenticated' });
+    }
+    res.send({ qr });
+});
+app.get('/api/whatsapp-status', (req, res) => {
+    const isReady = WhatsAppService_1.WhatsAppService.getIsReady();
+    const needsAuth = !isReady && !!WhatsAppService_1.WhatsAppService.getQRCode();
+    res.send({ isReady, needsAuth });
+});
 // Serve frontend static files in production
 app.use(express_1.default.static(path_1.default.join(__dirname, '../../frontend/dist')));
 app.get('/{*path}', (req, res) => {
@@ -33,29 +48,43 @@ app.get('/{*path}', (req, res) => {
 });
 const PORT = process.env.PORT || 3000;
 const MONGO_URI = process.env.MONGO_URI || 'mongodb://localhost:27017/pgsplitter';
-async function startServer() {
-    try {
-        await mongoose_1.default.connect(MONGO_URI);
+function startServer() {
+    // Start listening immediately so the HTTP server is always available,
+    // regardless of MongoDB connection status or WhatsApp initialization.
+    app.listen(PORT, () => {
+        console.log(`🚀 Server running on port ${PORT}`);
+    });
+    // Connect to MongoDB in the background. The HTTP server does not wait on this.
+    mongoose_1.default.connect(MONGO_URI)
+        .then(() => {
         console.log('✅ Connected to MongoDB');
         console.log('MongoDB URL:', MONGO_URI);
-        app.listen(PORT, async () => {
-            console.log(`🚀 Server running on port ${PORT}`);
-            // Setup Webhook if URL is provided in env
-            if (process.env.WEBHOOK_URL) {
-                const success = await TelegramService_1.TelegramService.setWebhook(`${process.env.WEBHOOK_URL}/webhook/telegram`);
-                if (success) {
-                    console.log(`✅ Telegram Webhook set to ${process.env.WEBHOOK_URL}/webhook/telegram`);
-                }
-                else {
-                    console.error('❌ Failed to set Telegram Webhook');
-                }
+    })
+        .catch((e) => {
+        console.error('❌ Error connecting to MongoDB (server continues running):', e);
+    });
+    // Setup Telegram Webhook if URL is provided in env. Fire-and-forget, does not block startup.
+    if (process.env.WEBHOOK_URL) {
+        TelegramService_1.TelegramService.setWebhook(`${process.env.WEBHOOK_URL}/webhook/telegram`)
+            .then((success) => {
+            if (success) {
+                console.log(`✅ Telegram Webhook set to ${process.env.WEBHOOK_URL}/webhook/telegram`);
             }
-            // Initialize WhatsApp Client
-            WhatsAppService_1.WhatsAppService.initialize();
+            else {
+                console.error('❌ Failed to set Telegram Webhook');
+            }
+        })
+            .catch((e) => {
+            console.error('❌ Error setting Telegram Webhook (server continues running):', e);
         });
     }
+    // Initialize WhatsApp Client asynchronously. The HTTP server does not wait for it,
+    // and any failure here must not affect server availability.
+    try {
+        WhatsAppService_1.WhatsAppService.initialize();
+    }
     catch (e) {
-        console.error('❌ Error starting server:', e);
+        console.error('❌ Error initializing WhatsApp Service (server continues running):', e);
     }
 }
 startServer();

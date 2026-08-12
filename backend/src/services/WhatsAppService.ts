@@ -33,8 +33,16 @@ export class WhatsAppService {
           dataPath: WHATSAPP_AUTH_PATH
         }),
         puppeteer: {
-          args: ['--no-sandbox', '--disable-setuid-sandbox'],
-          executablePath: process.env.PUPPETEER_EXECUTABLE_PATH || undefined
+          args: [
+            '--no-sandbox',
+            '--disable-setuid-sandbox',
+            '--disable-dev-shm-usage',
+            '--disable-gpu',
+            '--no-zygote',
+            '--single-process'
+          ],
+          executablePath: process.env.PUPPETEER_EXECUTABLE_PATH || undefined,
+          protocolTimeout: 120000, // 120s instead of default 30s
         },
         webVersionCache: {
           type: 'none'
