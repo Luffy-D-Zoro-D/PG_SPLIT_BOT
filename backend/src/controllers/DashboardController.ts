@@ -1,4 +1,5 @@
 import { Request, Response } from 'express';
+import mongoose from 'mongoose';
 import Expense from '../models/Expense';
 import Group from '../models/Group';
 import User from '../models/User';
@@ -268,7 +269,11 @@ export class DashboardController {
         return res.status(400).json({ error: 'No valid fields provided for update' });
       }
 
-      const expense = await Expense.findByIdAndUpdate(id, { $set: updateFields }, { new: true, timestamps: false });
+      // Use raw MongoDB collection update to bypass Mongoose's timestamps middleware stripping createdAt
+      const objectId = new mongoose.Types.ObjectId(id as string);
+      await Expense.collection.updateOne({ _id: objectId as any }, { $set: updateFields });
+
+      const expense = await Expense.findById(id);
 
       if (!expense) {
         console.error(`❌ [Error]: Expense ${id} not found in MongoDB`);

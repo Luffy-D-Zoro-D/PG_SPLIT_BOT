@@ -4,6 +4,7 @@ var __importDefault = (this && this.__importDefault) || function (mod) {
 };
 Object.defineProperty(exports, "__esModule", { value: true });
 exports.DashboardController = void 0;
+const mongoose_1 = __importDefault(require("mongoose"));
 const Expense_1 = __importDefault(require("../models/Expense"));
 const Group_1 = __importDefault(require("../models/Group"));
 const User_1 = __importDefault(require("../models/User"));
@@ -247,7 +248,10 @@ class DashboardController {
                 console.warn(`⚠️ [Warning]: No valid fields provided for update`);
                 return res.status(400).json({ error: 'No valid fields provided for update' });
             }
-            const expense = await Expense_1.default.findByIdAndUpdate(id, { $set: updateFields }, { new: true, timestamps: false });
+            // Use raw MongoDB collection update to bypass Mongoose's timestamps middleware stripping createdAt
+            const objectId = new mongoose_1.default.Types.ObjectId(id);
+            await Expense_1.default.collection.updateOne({ _id: objectId }, { $set: updateFields });
+            const expense = await Expense_1.default.findById(id);
             if (!expense) {
                 console.error(`❌ [Error]: Expense ${id} not found in MongoDB`);
                 return res.status(404).json({ error: 'Expense not found' });
