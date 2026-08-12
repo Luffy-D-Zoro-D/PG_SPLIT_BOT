@@ -239,19 +239,50 @@ export class DashboardController {
       const { id } = req.params;
       const { imageUrl, createdAt, description, totalAmount } = req.body;
 
+      console.log(`\n================ UPDATE EXPENSE REQUEST ================`);
+      console.log(`[Target Expense ID]: ${id}`);
+      console.log(`[Raw Payload Received]:`, { 
+        hasImageUrl: !!imageUrl, 
+        imageLength: imageUrl ? imageUrl.length : 0, 
+        createdAt, 
+        description, 
+        totalAmount 
+      });
+
       const updateFields: any = {};
-      if (imageUrl !== undefined) updateFields.imageUrl = imageUrl;
-      if (createdAt !== undefined) updateFields.createdAt = new Date(createdAt);
-      if (description !== undefined) updateFields.description = description;
-      if (totalAmount !== undefined) updateFields.totalAmount = totalAmount.toString();
+      if (imageUrl !== undefined && imageUrl !== null) updateFields.imageUrl = imageUrl;
+      if (createdAt !== undefined && createdAt !== null) {
+        const parsedDate = new Date(createdAt);
+        if (!isNaN(parsedDate.getTime())) {
+          updateFields.createdAt = parsedDate;
+          console.log(`[Parsed New createdAt]: ${parsedDate.toISOString()} (${parsedDate.toString()})`);
+        } else {
+          console.warn(`⚠️ [Warning]: Invalid createdAt date received: "${createdAt}"`);
+        }
+      }
+      if (description !== undefined && description !== null) updateFields.description = description;
+      if (totalAmount !== undefined && totalAmount !== null) updateFields.totalAmount = totalAmount.toString();
+
+      if (Object.keys(updateFields).length === 0) {
+        console.warn(`⚠️ [Warning]: No valid fields provided for update`);
+        return res.status(400).json({ error: 'No valid fields provided for update' });
+      }
 
       const expense = await Expense.findByIdAndUpdate(id, { $set: updateFields }, { new: true, timestamps: false });
 
-      if (!expense) return res.status(404).json({ error: 'Expense not found' });
+      if (!expense) {
+        console.error(`❌ [Error]: Expense ${id} not found in MongoDB`);
+        return res.status(404).json({ error: 'Expense not found' });
+      }
+
+      console.log(`✅ [SUCCESS]: Expense ${id} updated in MongoDB!`);
+      console.log(`   New createdAt in DB: ${expense.createdAt}`);
+      console.log(`   Has imageUrl in DB: ${!!expense.imageUrl}`);
+      console.log(`========================================================\n`);
 
       res.json({ success: true, expense });
-    } catch (e) {
-      console.error(e);
+    } catch (e: any) {
+      console.error(`❌ [ERROR in updateExpense]:`, e.message || e);
       res.status(500).json({ error: 'Failed to update expense' });
     }
   }

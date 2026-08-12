@@ -169,16 +169,30 @@ export default function App() {
   const handleSaveAdminEdits = async () => {
     if (!selectedExpense) return;
     try {
-      let newImageUrl = selectedExpense.imageUrl;
+      const payload: any = {};
 
       if (editImageFile) {
-        newImageUrl = await compressImage(editImageFile);
+        console.log('[Admin Edit]: Compressing new image file...', editImageFile.name);
+        payload.imageUrl = await compressImage(editImageFile);
+        console.log('[Admin Edit]: Image compressed, length:', payload.imageUrl.length);
       }
 
-      const payload: any = {
-        imageUrl: newImageUrl,
-        createdAt: editDateValue ? new Date(editDateValue).toISOString() : selectedExpense.createdAt
-      };
+      if (editDateValue) {
+        const parsedDate = new Date(editDateValue);
+        if (!isNaN(parsedDate.getTime())) {
+          payload.createdAt = parsedDate.toISOString();
+          console.log('[Admin Edit]: Date input value:', editDateValue, '-> ISO String:', payload.createdAt);
+        } else {
+          console.warn('[Admin Edit]: Invalid date string selected:', editDateValue);
+        }
+      }
+
+      if (Object.keys(payload).length === 0) {
+        toast.error('No changes to save');
+        return;
+      }
+
+      console.log('[Admin Edit]: Sending PUT payload to /api/expenses/' + selectedExpense._id, payload);
 
       const res = await fetch(`/api/expenses/${selectedExpense._id}`, {
         method: 'PUT',
@@ -186,14 +200,21 @@ export default function App() {
         body: JSON.stringify(payload)
       });
 
-      if (!res.ok) throw new Error('Failed to update entry');
+      if (!res.ok) {
+        const errText = await res.text();
+        console.error('[Admin Edit]: Server error response:', res.status, errText);
+        throw new Error('Failed to update entry');
+      }
       
+      const resData = await res.json();
+      console.log('[Admin Edit]: Server update successful:', resData);
+
       toast.success('Entry updated successfully!');
       setSelectedExpense(null);
       setEditImageFile(null);
       await fetchData();
     } catch (e) {
-      console.error(e);
+      console.error('[Admin Edit Error]:', e);
       toast.error('Failed to update entry');
     }
   };
