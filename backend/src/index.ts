@@ -36,30 +36,44 @@ app.get('/{*path}', (req, res) => {
 const PORT = process.env.PORT || 3000;
 const MONGO_URI = process.env.MONGO_URI || 'mongodb://localhost:27017/pgsplitter';
 
-async function startServer() {
-  try {
-    await mongoose.connect(MONGO_URI);
-    console.log('✅ Connected to MongoDB');
-    console.log('MongoDB URL:', MONGO_URI);
+function startServer() {
+  // Start listening immediately so the HTTP server is always available,
+  // regardless of MongoDB connection status or WhatsApp initialization.
+  app.listen(PORT, () => {
+    console.log(`🚀 Server running on port ${PORT}`);
+  });
 
-    app.listen(PORT, async () => {
-      console.log(`🚀 Server running on port ${PORT}`);
-      
-      // Setup Webhook if URL is provided in env
-      if (process.env.WEBHOOK_URL) {
-        const success = await TelegramService.setWebhook(`${process.env.WEBHOOK_URL}/webhook/telegram`);
+  // Connect to MongoDB in the background. The HTTP server does not wait on this.
+  mongoose.connect(MONGO_URI)
+    .then(() => {
+      console.log('✅ Connected to MongoDB');
+      console.log('MongoDB URL:', MONGO_URI);
+    })
+    .catch((e) => {
+      console.error('❌ Error connecting to MongoDB (server continues running):', e);
+    });
+
+  // Setup Telegram Webhook if URL is provided in env. Fire-and-forget, does not block startup.
+  if (process.env.WEBHOOK_URL) {
+    TelegramService.setWebhook(`${process.env.WEBHOOK_URL}/webhook/telegram`)
+      .then((success) => {
         if (success) {
           console.log(`✅ Telegram Webhook set to ${process.env.WEBHOOK_URL}/webhook/telegram`);
         } else {
           console.error('❌ Failed to set Telegram Webhook');
         }
-      }
+      })
+      .catch((e) => {
+        console.error('❌ Error setting Telegram Webhook (server continues running):', e);
+      });
+  }
 
-      // Initialize WhatsApp Client
-      WhatsAppService.initialize();
-    });
+  // Initialize WhatsApp Client asynchronously. The HTTP server does not wait for it,
+  // and any failure here must not affect server availability.
+  try {
+    WhatsAppService.initialize();
   } catch (e) {
-    console.error('❌ Error starting server:', e);
+    console.error('❌ Error initializing WhatsApp Service (server continues running):', e);
   }
 }
 
