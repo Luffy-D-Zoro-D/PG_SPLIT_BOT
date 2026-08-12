@@ -122,11 +122,7 @@ export class ExpenseService {
   }
 
   static async cancelExpense(expenseId: string): Promise<IExpense | null> {
-    const expense = await Expense.findOneAndUpdate(
-      { _id: expenseId, status: ExpenseStatus.PENDING_CONFIRMATION },
-      { $set: { status: ExpenseStatus.CANCELLED } },
-      { returnDocument: 'after' }
-    );
+    const expense = await Expense.findOneAndDelete({ _id: expenseId });
     return expense;
   }
 

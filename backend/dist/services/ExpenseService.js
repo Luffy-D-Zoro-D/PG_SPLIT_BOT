@@ -136,7 +136,7 @@ class ExpenseService {
         return expense;
     }
     static async cancelExpense(expenseId) {
-        const expense = await Expense_1.default.findOneAndUpdate({ _id: expenseId, status: Expense_1.ExpenseStatus.PENDING_CONFIRMATION }, { $set: { status: Expense_1.ExpenseStatus.CANCELLED } }, { returnDocument: 'after' });
+        const expense = await Expense_1.default.findOneAndDelete({ _id: expenseId });
         return expense;
     }
     static findMatchingUser(name, memberMap) {

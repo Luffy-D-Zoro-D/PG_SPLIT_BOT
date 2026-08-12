@@ -58,6 +58,8 @@ class DashboardController {
                 return res.status(400).json({ error: 'groupId is required' });
             const groupId = parseInt(groupIdStr, 10);
             const dateFilter = DashboardController.getDateFilter(range);
+            // Clean up any cancelled or unconfirmed expenses from MongoDB Atlas
+            await Expense_1.default.deleteMany({ status: { $ne: 'CONFIRMED' } });
             const expenses = await Expense_1.default.find({ telegramChatId: groupId, status: 'CONFIRMED', ...dateFilter }).sort({ createdAt: -1 }).limit(50).lean();
             const settlements = await Settlement_1.default.find({ telegramChatId: groupId, status: { $in: ['CONFIRMED', 'PENDING_APPROVAL'] }, ...dateFilter }).sort({ createdAt: -1 }).limit(50).lean();
             const userIds = new Set();
@@ -167,9 +169,8 @@ class DashboardController {
                     error: 'Cannot delete expense because settlements have already been confirmed in this group. Please create an offsetting adjustment expense instead.'
                 });
             }
-            // Safe cancellation instead of deletion
-            expense.status = 'CANCELLED';
-            await expense.save();
+            // Hard delete expense from MongoDB
+            await Expense_1.default.deleteOne({ _id: id });
             res.json({ success: true });
         }
         catch (e) {

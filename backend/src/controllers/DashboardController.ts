@@ -57,6 +57,9 @@ export class DashboardController {
       const groupId = parseInt(groupIdStr, 10);
       const dateFilter = DashboardController.getDateFilter(range);
 
+      // Clean up any cancelled or unconfirmed expenses from MongoDB Atlas
+      await Expense.deleteMany({ status: { $ne: 'CONFIRMED' } } as any);
+
       const expenses = await Expense.find({ telegramChatId: groupId, status: 'CONFIRMED', ...dateFilter } as any).sort({ createdAt: -1 }).limit(50).lean();
       const settlements = await Settlement.find({ telegramChatId: groupId, status: { $in: ['CONFIRMED', 'PENDING_APPROVAL'] }, ...dateFilter } as any).sort({ createdAt: -1 }).limit(50).lean();
       
@@ -181,9 +184,8 @@ export class DashboardController {
         });
       }
 
-      // Safe cancellation instead of deletion
-      expense.status = 'CANCELLED' as any;
-      await expense.save();
+      // Hard delete expense from MongoDB
+      await Expense.deleteOne({ _id: id });
       
       res.json({ success: true });
     } catch (e) {
