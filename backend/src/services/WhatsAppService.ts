@@ -1,8 +1,13 @@
 import { Client, LocalAuth } from 'whatsapp-web.js';
 import qrcode from 'qrcode-terminal';
 import dotenv from 'dotenv';
+import fs from 'fs';
 
 dotenv.config();
+
+// Railway mounts a persistent volume at this path so the WhatsApp session
+// survives across deployments/restarts, avoiding a re-scan of the QR code.
+const WHATSAPP_AUTH_PATH = process.env.WHATSAPP_AUTH_PATH || '/app/whatsapp-auth';
 
 export class WhatsAppService {
   private static client: Client | null = null;
@@ -12,9 +17,20 @@ export class WhatsAppService {
     console.log('Initializing WhatsApp Client...');
     
     try {
-      // We use LocalAuth to save session data so we don't need to scan QR code every time
+      // Make sure the persistent volume directory exists before LocalAuth tries to use it.
+      try {
+        fs.mkdirSync(WHATSAPP_AUTH_PATH, { recursive: true });
+      } catch (mkdirErr: any) {
+        console.error('❌ Failed to ensure WhatsApp auth directory exists (continuing anyway):', mkdirErr.message);
+      }
+
+      // We use LocalAuth pointed at the persistent volume so the session survives
+      // container restarts/redeploys and we don't need to scan the QR code every time.
       this.client = new Client({
-        authStrategy: new LocalAuth(),
+        authStrategy: new LocalAuth({
+          clientId: 'PG_SPLIT_BOT',
+          dataPath: WHATSAPP_AUTH_PATH
+        }),
         puppeteer: {
           args: ['--no-sandbox', '--disable-setuid-sandbox'],
           executablePath: process.env.PUPPETEER_EXECUTABLE_PATH || undefined
