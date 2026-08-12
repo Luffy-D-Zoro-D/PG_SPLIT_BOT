@@ -12,25 +12,25 @@ const openai = new OpenAI({
 
 // Using zod to strictly type and validate the JSON output
 export const ExpenseExtractionSchema = z.object({
-    language: z.string(),
-    intent: z.enum(['CREATE_EXPENSE', 'CHAT', 'UNKNOWN']),
+    language: z.string().nullish().default('en'),
+    intent: z.enum(['CREATE_EXPENSE', 'CHAT', 'UNKNOWN']).nullish().default('CREATE_EXPENSE'),
     totalAmount: z.number().nullish(),
     paidBy: z.string().nullish(), // We will map this string to a telegramUserId later
     description: z.string().nullish(),
     sharedExpense: z.object({
-        amount: z.number(),
-        splitType: z.string(),
+        amount: z.number().nullish(),
+        splitType: z.string().nullish(),
         participants: z.array(z.object({
             user: z.string(),
-            share: z.number()
-        }))
+            share: z.number().nullish()
+        })).nullish()
     }).nullish(),
     personalExpenses: z.array(z.object({
         user: z.string(),
-        amount: z.number()
+        amount: z.number().nullish()
     })).nullish(),
-    confidence: z.number(),
-    needsClarification: z.boolean(),
+    confidence: z.number().nullish().default(0.5),
+    needsClarification: z.boolean().nullish().default(false),
     clarificationQuestion: z.string().nullish(),
     chatResponse: z.string().nullish(),
     itemsBreakdown: z.array(z.string()).nullish()

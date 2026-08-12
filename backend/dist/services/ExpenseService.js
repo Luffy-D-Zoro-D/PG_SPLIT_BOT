@@ -90,12 +90,13 @@ class ExpenseService {
         const personalShares = [];
         if (extraction.personalExpenses) {
             for (const p of extraction.personalExpenses) {
-                sumPersonal = sumPersonal.plus(p.amount);
+                const amt = p.amount || 0;
+                sumPersonal = sumPersonal.plus(amt);
                 // Find matching user id
                 const matchedId = this.findMatchingUser(p.user, memberMap);
                 if (!matchedId)
                     return { error: `Could not identify user: ${p.user}` };
-                personalShares.push({ telegramUserId: matchedId, share: p.amount.toString() });
+                personalShares.push({ telegramUserId: matchedId, share: amt.toString() });
             }
         }
         if (!totalAmount.equals(sharedAmount.plus(sumPersonal))) {
@@ -108,7 +109,7 @@ class ExpenseService {
                 const matchedId = this.findMatchingUser(p.user, memberMap);
                 if (!matchedId)
                     return { error: `Could not identify user: ${p.user}` };
-                sharedParticipants.push({ telegramUserId: matchedId, share: p.share.toString() });
+                sharedParticipants.push({ telegramUserId: matchedId, share: (p.share || 0).toString() });
             }
         }
         const paidById = this.findMatchingUser(extraction.paidBy, memberMap);

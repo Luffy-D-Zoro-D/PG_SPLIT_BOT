@@ -15,25 +15,25 @@ const openai = new openai_1.default({
 });
 // Using zod to strictly type and validate the JSON output
 exports.ExpenseExtractionSchema = zod_1.z.object({
-    language: zod_1.z.string(),
-    intent: zod_1.z.enum(['CREATE_EXPENSE', 'CHAT', 'UNKNOWN']),
+    language: zod_1.z.string().nullish().default('en'),
+    intent: zod_1.z.enum(['CREATE_EXPENSE', 'CHAT', 'UNKNOWN']).nullish().default('CREATE_EXPENSE'),
     totalAmount: zod_1.z.number().nullish(),
     paidBy: zod_1.z.string().nullish(), // We will map this string to a telegramUserId later
     description: zod_1.z.string().nullish(),
     sharedExpense: zod_1.z.object({
-        amount: zod_1.z.number(),
-        splitType: zod_1.z.string(),
+        amount: zod_1.z.number().nullish(),
+        splitType: zod_1.z.string().nullish(),
         participants: zod_1.z.array(zod_1.z.object({
             user: zod_1.z.string(),
-            share: zod_1.z.number()
-        }))
+            share: zod_1.z.number().nullish()
+        })).nullish()
     }).nullish(),
     personalExpenses: zod_1.z.array(zod_1.z.object({
         user: zod_1.z.string(),
-        amount: zod_1.z.number()
+        amount: zod_1.z.number().nullish()
     })).nullish(),
-    confidence: zod_1.z.number(),
-    needsClarification: zod_1.z.boolean(),
+    confidence: zod_1.z.number().nullish().default(0.5),
+    needsClarification: zod_1.z.boolean().nullish().default(false),
     clarificationQuestion: zod_1.z.string().nullish(),
     chatResponse: zod_1.z.string().nullish(),
     itemsBreakdown: zod_1.z.array(zod_1.z.string()).nullish()
