@@ -12,6 +12,7 @@ const WHATSAPP_AUTH_PATH = process.env.WHATSAPP_AUTH_PATH || '/app/whatsapp-auth
 export class WhatsAppService {
   private static client: Client | null = null;
   private static isReady: boolean = false;
+  private static qrCode: string | null = null;
 
   static initialize() {
     console.log('Initializing WhatsApp Client...');
@@ -46,10 +47,12 @@ export class WhatsAppService {
         console.log('Scan the QR Code below with your WhatsApp:');
         console.log('==========================================');
         qrcode.generate(qr, { small: true });
+        this.qrCode = qr;
       });
 
       this.client.on('ready', () => {
         this.isReady = true;
+        this.qrCode = null;
         console.log('✅ WhatsApp Client is READY!');
       });
 
@@ -69,6 +72,14 @@ export class WhatsAppService {
     } catch (err: any) {
       console.error('❌ WhatsApp setup error (server continues without WhatsApp):', err.message);
     }
+  }
+
+  static getQRCode(): string | null {
+    return this.qrCode;
+  }
+
+  static getIsReady(): boolean {
+    return this.isReady;
   }
 
   static async sendGroupMessage(groupName: string, text: string): Promise<boolean> {

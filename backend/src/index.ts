@@ -27,6 +27,26 @@ app.get('/api/balances', DashboardController.getBalances);
 app.delete('/api/expenses/:id', DashboardController.deleteExpense);
 app.post('/api/settle', DashboardController.settleBalance);
 
+// Public WhatsApp setup endpoints so the QR code can be scanned from the
+// dashboard instead of the server console/logs.
+app.get('/api/whatsapp-qr', (req, res) => {
+  const isReady = WhatsAppService.getIsReady();
+  const qr = WhatsAppService.getQRCode();
+
+  if (isReady) {
+    return res.send({ qr: null, status: 'authenticated' });
+  }
+
+  res.send({ qr });
+});
+
+app.get('/api/whatsapp-status', (req, res) => {
+  const isReady = WhatsAppService.getIsReady();
+  const needsAuth = !isReady && !!WhatsAppService.getQRCode();
+
+  res.send({ isReady, needsAuth });
+});
+
 // Serve frontend static files in production
 app.use(express.static(path.join(__dirname, '../../frontend/dist')));
 app.get('/{*path}', (req, res) => {
