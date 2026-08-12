@@ -1,9 +1,10 @@
 import React, { useEffect, useState, useMemo } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
-import { Wallet, Users, Activity, Search, Sparkles, ArrowRight, Bot, X, Receipt, CheckCircle2, Handshake } from 'lucide-react';
+import { Wallet, Users, Activity, Search, Sparkles, ArrowRight, Bot, X, Receipt, CheckCircle2, Handshake, MessageCircle } from 'lucide-react';
 import { clsx, type ClassValue } from 'clsx';
 import { twMerge } from 'tailwind-merge';
 import toast, { Toaster } from 'react-hot-toast';
+import QRCode from 'qrcode';
 
 function cn(...inputs: ClassValue[]) {
   return twMerge(clsx(inputs));
@@ -22,6 +23,12 @@ export default function App() {
   
   // Custom Modal State
   const [confirmModal, setConfirmModal] = useState<{ isOpen: boolean, title: string, message: string, onConfirm: () => void } | null>(null);
+
+  // WhatsApp QR state
+  const [waQR, setWaQR] = useState<string | null>(null);
+  const [waReady, setWaReady] = useState(false);
+  const [waQRImage, setWaQRImage] = useState<string | null>(null);
+  const [showWaPanel, setShowWaPanel] = useState(false);
 
   const fetchData = async () => {
     if (!groupId) {
@@ -59,6 +66,35 @@ export default function App() {
       setLoading(false);
     }
   }, [groupId]);
+
+  // Poll WhatsApp status & QR code
+  useEffect(() => {
+    if (waReady) return; // Stop polling once connected
+
+    const pollWA = async () => {
+      try {
+        const res = await fetch('/api/whatsapp-qr');
+        const data = await res.json();
+        if (data.status === 'authenticated') {
+          setWaReady(true);
+          setWaQR(null);
+          setWaQRImage(null);
+          return;
+        }
+        if (data.qr && data.qr !== waQR) {
+          setWaQR(data.qr);
+          const dataUrl = await QRCode.toDataURL(data.qr, { width: 256, margin: 1 });
+          setWaQRImage(dataUrl);
+        }
+      } catch (e) {
+        // Backend might not be ready yet
+      }
+    };
+
+    pollWA();
+    const interval = setInterval(pollWA, 3000);
+    return () => clearInterval(interval);
+  }, [waReady, waQR]);
 
   const handleDeleteExpense = (id: string) => {
     setConfirmModal({
@@ -258,6 +294,48 @@ export default function App() {
           </div>
         </div>
       </nav>
+
+      {/* WhatsApp QR Floating Widget */}
+      {!waReady && (
+        <div className="fixed bottom-6 right-6 z-50">
+          <button
+            onClick={() => setShowWaPanel(!showWaPanel)}
+            className="w-14 h-14 rounded-full bg-gradient-to-r from-green-500 to-emerald-600 shadow-[0_0_25px_rgba(16,185,129,0.4)] hover:shadow-[0_0_35px_rgba(16,185,129,0.6)] flex items-center justify-center transition-all hover:scale-105"
+          >
+            <MessageCircle className="w-6 h-6 text-white" />
+          </button>
+          <AnimatePresence>
+            {showWaPanel && (
+              <motion.div
+                initial={{ opacity: 0, y: 20, scale: 0.9 }}
+                animate={{ opacity: 1, y: 0, scale: 1 }}
+                exit={{ opacity: 0, y: 20, scale: 0.9 }}
+                className="absolute bottom-16 right-0 w-80 bg-[#18181b]/95 backdrop-blur-xl border border-white/10 rounded-2xl shadow-2xl p-6"
+              >
+                <div className="flex items-center justify-between mb-4">
+                  <h3 className="text-white font-bold text-sm">WhatsApp Setup</h3>
+                  <button onClick={() => setShowWaPanel(false)} className="text-slate-400 hover:text-white">
+                    <X className="w-4 h-4" />
+                  </button>
+                </div>
+                {waQRImage ? (
+                  <div className="flex flex-col items-center space-y-3">
+                    <div className="bg-white p-3 rounded-xl">
+                      <img src={waQRImage} alt="WhatsApp QR" className="w-52 h-52" />
+                    </div>
+                    <p className="text-xs text-slate-400 text-center">Scan this QR code with your WhatsApp to connect the bot</p>
+                  </div>
+                ) : (
+                  <div className="flex flex-col items-center space-y-3 py-4">
+                    <div className="w-10 h-10 border-2 border-green-500/30 border-t-green-500 rounded-full animate-spin" />
+                    <p className="text-xs text-slate-400">Waiting for QR code...</p>
+                  </div>
+                )}
+              </motion.div>
+            )}
+          </AnimatePresence>
+        </div>
+      )}
 
       <main className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-10 space-y-10 relative z-10">
         
