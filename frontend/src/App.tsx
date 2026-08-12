@@ -373,26 +373,27 @@ export default function App() {
       <div className="fixed bottom-[-20%] right-[-10%] w-[50%] h-[50%] bg-blue-600/10 rounded-full blur-[120px] pointer-events-none" />
 
       {/* Navbar */}
-      <nav className="sticky top-0 z-40 backdrop-blur-2xl bg-[#09090b]/60 border-b border-white/5">
-        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
-          <div className="flex justify-between items-center h-20">
-            <div className="flex items-center space-x-4">
-              <div className="relative">
+      <nav className="sticky top-0 z-40 backdrop-blur-2xl bg-[#09090b]/80 border-b border-white/5">
+        <div className="max-w-7xl mx-auto px-3 sm:px-6 lg:px-8">
+          <div className="flex justify-between items-center h-16 md:h-20">
+            <div className="flex items-center space-x-2.5 sm:space-x-4">
+              <div className="relative shrink-0">
                 <div className="absolute inset-0 bg-gradient-to-r from-blue-500 to-purple-500 blur-lg opacity-50" />
-                <div className="relative w-12 h-12 rounded-2xl bg-black border border-white/10 flex items-center justify-center shadow-2xl">
-                  <Bot className="w-6 h-6 text-purple-400" />
+                <div className="relative w-9 h-9 sm:w-12 sm:h-12 rounded-xl sm:rounded-2xl bg-black border border-white/10 flex items-center justify-center shadow-2xl">
+                  <Bot className="w-5 h-5 sm:w-6 sm:h-6 text-purple-400" />
                 </div>
               </div>
               <div>
-                <h1 className="text-2xl font-bold font-heading bg-gradient-to-r from-white via-slate-200 to-slate-400 bg-clip-text text-transparent tracking-tight">
+                <h1 className="text-lg sm:text-2xl font-bold font-heading bg-gradient-to-r from-white via-slate-200 to-slate-400 bg-clip-text text-transparent tracking-tight">
                   PG SPLITTER
                 </h1>
-                <p className="text-xs text-purple-400/80 font-medium tracking-widest uppercase flex items-center gap-1">
-                  <Sparkles className="w-3 h-3" /> AI Powered
+                <p className="text-[10px] sm:text-xs text-purple-400/80 font-medium tracking-widest uppercase flex items-center gap-1">
+                  <Sparkles className="w-2.5 h-2.5 sm:w-3 sm:h-3" /> AI Powered
                 </p>
               </div>
             </div>
             
+            {/* Desktop Navigation */}
             <div className="hidden md:flex items-center space-x-4">
               {/* WhatsApp Notification Toggle */}
               <div className="flex items-center space-x-2 bg-white/5 border border-white/10 px-3.5 py-2 rounded-full">
@@ -432,6 +433,46 @@ export default function App() {
               >
                 Switch Group
               </button>
+            </div>
+
+            {/* Mobile Actions */}
+            <div className="flex md:hidden items-center space-x-2">
+              <button
+                onClick={() => toggleWaNotifications(!waNotificationsEnabled)}
+                className={cn(
+                  "p-2 rounded-xl border flex items-center gap-1.5 text-xs font-medium transition-colors",
+                  waNotificationsEnabled 
+                    ? "bg-emerald-500/10 border-emerald-500/30 text-emerald-400" 
+                    : "bg-white/5 border-white/10 text-slate-400"
+                )}
+              >
+                <MessageCircle className="w-4 h-4" />
+                <span>{waNotificationsEnabled ? 'WA On' : 'WA Off'}</span>
+              </button>
+
+              <button
+                onClick={() => {
+                  localStorage.removeItem('pg_groupId');
+                  setGroupId('');
+                }}
+                className="text-[11px] font-medium bg-red-500/10 text-red-400 px-2.5 py-2 rounded-xl border border-red-500/20"
+              >
+                Switch
+              </button>
+            </div>
+          </div>
+
+          {/* Mobile Search Bar */}
+          <div className="pb-3 block md:hidden">
+            <div className="relative">
+              <Search className="w-4 h-4 text-slate-500 absolute left-3.5 top-1/2 -translate-y-1/2" />
+              <input 
+                type="text" 
+                value={searchQuery}
+                onChange={(e) => setSearchQuery(e.target.value)}
+                placeholder="Search ledger..." 
+                className="w-full bg-white/5 border border-white/10 rounded-xl py-2 pl-10 pr-4 text-xs focus:outline-none focus:ring-1 focus:ring-purple-500/50 text-white placeholder:text-slate-500"
+              />
             </div>
           </div>
         </div>
@@ -479,18 +520,18 @@ export default function App() {
         </div>
       )}
 
-      <main className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-10 space-y-8 relative z-10">
+      <main className="max-w-7xl mx-auto px-3 sm:px-6 lg:px-8 py-4 sm:py-10 space-y-4 sm:space-y-8 relative z-10">
         
         {/* Time Range Filter Bar */}
-        <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center bg-white/[0.02] border border-white/5 p-3 rounded-2xl gap-3">
-          <div className="flex items-center space-x-2">
-            <span className="text-xs text-slate-400 font-semibold px-2 uppercase tracking-wider">Filter Timeframe:</span>
+        <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center bg-white/[0.02] border border-white/5 p-2.5 sm:p-3 rounded-xl sm:rounded-2xl gap-2 sm:gap-3">
+          <div className="flex items-center space-x-1.5 sm:space-x-2 w-full sm:w-auto overflow-x-auto pb-1 sm:pb-0">
+            <span className="text-[10px] sm:text-xs text-slate-400 font-semibold px-1 sm:px-2 uppercase tracking-wider shrink-0">Filter:</span>
             {(['all', 'month', 'week'] as const).map((range) => (
               <button
                 key={range}
                 onClick={() => setTimeRange(range)}
                 className={cn(
-                  "px-4 py-1.5 rounded-xl text-xs font-medium transition-all capitalize",
+                  "px-3 py-1 sm:px-4 sm:py-1.5 rounded-lg sm:rounded-xl text-[11px] sm:text-xs font-medium transition-all capitalize shrink-0",
                   timeRange === range
                     ? "bg-purple-600/30 text-purple-300 border border-purple-500/40 shadow-lg shadow-purple-500/10"
                     : "text-slate-400 hover:text-white hover:bg-white/5 border border-transparent"
@@ -503,23 +544,23 @@ export default function App() {
         </div>
 
         {/* Metrics Row */}
-        <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+        <div className="grid grid-cols-3 gap-2 sm:gap-6">
           <MetricCard 
             title="Total Recorded" 
             value={`₹${stats?.totalAmountRecorded || '0'}`} 
-            icon={<Wallet className="w-5 h-5 text-purple-400" />}
+            icon={<Wallet className="w-4 h-4 sm:w-5 sm:h-5 text-purple-400" />}
             delay={0.1}
           />
           <MetricCard 
             title="Total Expenses" 
             value={stats?.totalExpenses || '0'} 
-            icon={<Receipt className="w-5 h-5 text-blue-400" />}
+            icon={<Receipt className="w-4 h-4 sm:w-5 sm:h-5 text-blue-400" />}
             delay={0.2}
           />
           <MetricCard 
             title="Active Groups" 
             value={stats?.totalGroups || '0'} 
-            icon={<Users className="w-5 h-5 text-emerald-400" />}
+            icon={<Users className="w-4 h-4 sm:w-5 sm:h-5 text-emerald-400" />}
             delay={0.3}
           />
         </div>
@@ -549,51 +590,51 @@ export default function App() {
                       key={entry._id} 
                       onClick={() => entry.type === 'EXPENSE' ? setSelectedExpense(entry) : null}
                       className={cn(
-                        "group p-5 bg-white/[0.02] hover:bg-white/[0.04] border border-white/5 hover:border-white/10 rounded-2xl transition-all flex flex-col sm:flex-row sm:items-center justify-between gap-4",
+                        "group p-3 sm:p-5 bg-white/[0.02] hover:bg-white/[0.04] border border-white/5 hover:border-white/10 rounded-xl sm:rounded-2xl transition-all flex items-center justify-between gap-2.5 sm:gap-4",
                         entry.type === 'EXPENSE' && "cursor-pointer"
                       )}
                     >
-                      <div className="flex items-center gap-4">
+                      <div className="flex items-center gap-2.5 sm:gap-4 min-w-0">
                         {entry.type === 'SETTLEMENT' ? (
-                          <div className="w-14 h-14 rounded-xl bg-gradient-to-br from-emerald-500/10 to-emerald-900/20 border border-emerald-500/20 flex items-center justify-center text-emerald-400 shadow-lg shrink-0">
-                            <Handshake className="w-6 h-6" />
+                          <div className="w-10 h-10 sm:w-14 sm:h-14 rounded-lg sm:rounded-xl bg-gradient-to-br from-emerald-500/10 to-emerald-900/20 border border-emerald-500/20 flex items-center justify-center text-emerald-400 shadow-lg shrink-0">
+                            <Handshake className="w-5 h-5 sm:w-6 sm:h-6" />
                           </div>
                         ) : entry.imageUrl ? (
-                          <div className="w-14 h-14 rounded-xl overflow-hidden border border-white/10 shadow-lg shrink-0 bg-slate-900 flex items-center justify-center">
+                          <div className="w-10 h-10 sm:w-14 sm:h-14 rounded-lg sm:rounded-xl overflow-hidden border border-white/10 shadow-lg shrink-0 bg-slate-900 flex items-center justify-center">
                             {/\.(mp3|wav|ogg|oga|m4a|aac)$/i.test(entry.imageUrl) ? (
-                               <Activity className="w-6 h-6 text-purple-400" />
+                               <Activity className="w-5 h-5 sm:w-6 sm:h-6 text-purple-400" />
                             ) : (
                                <img src={entry.imageUrl} alt="Receipt" className="w-full h-full object-cover" />
                             )}
                           </div>
                         ) : (
-                          <div className="w-14 h-14 rounded-xl bg-gradient-to-br from-slate-800 to-slate-900 border border-white/10 flex items-center justify-center text-xl font-heading font-bold text-slate-400 shadow-lg shrink-0 group-hover:text-white transition-colors">
+                          <div className="w-10 h-10 sm:w-14 sm:h-14 rounded-lg sm:rounded-xl bg-gradient-to-br from-slate-800 to-slate-900 border border-white/10 flex items-center justify-center text-base sm:text-xl font-heading font-bold text-slate-400 shadow-lg shrink-0 group-hover:text-white transition-colors">
                             {String(entry.paidByName).charAt(0).toUpperCase()}
                           </div>
                         )}
-                        <div>
-                          <div className="flex items-center gap-2 mb-1">
-                            <h3 className="font-medium text-slate-200 text-lg">
+                        <div className="min-w-0">
+                          <div className="flex items-center gap-2 mb-0.5 sm:mb-1">
+                            <h3 className="font-medium text-slate-200 text-sm sm:text-lg truncate">
                               {entry.type === 'SETTLEMENT' 
                                 ? `${entry.paidByName} settled with ${entry.paidToName}` 
                                 : (entry.description || 'General Expense')}
                             </h3>
                           </div>
-                          <p className="text-sm text-slate-500">
+                          <p className="text-[11px] sm:text-sm text-slate-500 truncate">
                             {entry.type === 'SETTLEMENT' ? 'Settlement' : `Paid by `} 
                             {entry.type !== 'SETTLEMENT' && <span className="text-slate-300">{entry.paidByName}</span>}
-                            <span className="mx-2 opacity-50">•</span>
+                            <span className="mx-1.5 opacity-50">•</span>
                             {new Date(entry.createdAt).toLocaleDateString(undefined, { month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit' })}
                           </p>
                         </div>
                       </div>
 
-                      <div className="flex items-center justify-between sm:flex-col sm:items-end gap-2 shrink-0">
+                      <div className="flex flex-col items-end gap-0.5 shrink-0">
                         <div className="text-right">
-                          <p className={cn("font-heading font-bold text-xl", entry.type === 'SETTLEMENT' ? 'text-emerald-400' : 'text-white')}>
+                          <p className={cn("font-heading font-bold text-sm sm:text-xl", entry.type === 'SETTLEMENT' ? 'text-emerald-400' : 'text-white')}>
                             ₹{entry.totalAmount}
                           </p>
-                          <p className={cn("text-xs font-medium uppercase tracking-wider mt-1", 
+                          <p className={cn("text-[10px] sm:text-xs font-medium uppercase tracking-wider", 
                             entry.status === 'CONFIRMED' ? 'text-emerald-400' :
                             entry.status === 'CANCELLED' ? 'text-rose-400' :
                             'text-amber-400 animate-pulse'
@@ -894,15 +935,15 @@ function MetricCard({ title, value, icon, delay }: { title: string, value: strin
       initial={{ opacity: 0, y: 20 }}
       animate={{ opacity: 1, y: 0 }}
       transition={{ delay }}
-      className="relative overflow-hidden bg-white/[0.02] backdrop-blur-xl rounded-3xl border border-white/10 p-6 group hover:-translate-y-1 transition-all duration-300"
+      className="relative overflow-hidden bg-white/[0.02] backdrop-blur-xl rounded-2xl sm:rounded-3xl border border-white/10 p-3.5 sm:p-6 group hover:-translate-y-1 transition-all duration-300"
     >
       <div className="absolute inset-0 bg-gradient-to-br from-white/5 to-transparent opacity-0 group-hover:opacity-100 transition-opacity" />
       <div className="relative flex justify-between items-start">
         <div>
-          <p className="text-slate-400 text-sm font-medium mb-1">{title}</p>
-          <h3 className="text-3xl font-heading font-bold text-white tracking-tight">{value}</h3>
+          <p className="text-slate-400 text-[11px] sm:text-sm font-medium mb-0.5 sm:mb-1">{title}</p>
+          <h3 className="text-lg sm:text-3xl font-heading font-bold text-white tracking-tight">{value}</h3>
         </div>
-        <div className="p-3 bg-white/5 rounded-2xl shadow-inner border border-white/5 group-hover:scale-110 transition-transform">
+        <div className="p-2 sm:p-3 bg-white/5 rounded-xl sm:rounded-2xl shadow-inner border border-white/5 group-hover:scale-110 transition-transform shrink-0">
           {icon}
         </div>
       </div>
