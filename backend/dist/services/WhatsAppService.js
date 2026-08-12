@@ -39,11 +39,11 @@ class WhatsAppService {
                         '--disable-setuid-sandbox',
                         '--disable-dev-shm-usage',
                         '--disable-gpu',
-                        '--no-zygote',
-                        '--single-process'
+                        '--disable-accelerated-2d-canvas',
+                        '--no-first-run'
                     ],
                     executablePath: process.env.PUPPETEER_EXECUTABLE_PATH || undefined,
-                    protocolTimeout: 120000, // 120s instead of default 30s
+                    protocolTimeout: 120000, // 120s timeout
                 },
                 webVersionCache: {
                     type: 'none'
