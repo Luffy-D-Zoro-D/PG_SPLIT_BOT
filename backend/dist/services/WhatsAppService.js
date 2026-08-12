@@ -13,32 +13,44 @@ class WhatsAppService {
     static isReady = false;
     static initialize() {
         console.log('Initializing WhatsApp Client...');
-        // We use LocalAuth to save session data so we don't need to scan QR code every time
-        this.client = new whatsapp_web_js_1.Client({
-            authStrategy: new whatsapp_web_js_1.LocalAuth(),
-            puppeteer: {
-                args: ['--no-sandbox', '--disable-setuid-sandbox']
-            },
-            webVersionCache: {
-                type: 'none'
-            }
-        });
-        this.client.on('qr', (qr) => {
-            console.log('==========================================');
-            console.log('📱 WHATSAPP LOGIN REQUIRED!');
-            console.log('Scan the QR Code below with your WhatsApp:');
-            console.log('==========================================');
-            qrcode_terminal_1.default.generate(qr, { small: true });
-        });
-        this.client.on('ready', () => {
-            this.isReady = true;
-            console.log('✅ WhatsApp Client is READY!');
-        });
-        this.client.on('disconnected', (reason) => {
-            console.log('❌ WhatsApp Client was disconnected:', reason);
-            this.isReady = false;
-        });
-        this.client.initialize();
+        try {
+            // We use LocalAuth to save session data so we don't need to scan QR code every time
+            this.client = new whatsapp_web_js_1.Client({
+                authStrategy: new whatsapp_web_js_1.LocalAuth(),
+                puppeteer: {
+                    args: ['--no-sandbox', '--disable-setuid-sandbox'],
+                    executablePath: process.env.PUPPETEER_EXECUTABLE_PATH || undefined
+                },
+                webVersionCache: {
+                    type: 'none'
+                }
+            });
+            this.client.on('qr', (qr) => {
+                console.log('==========================================');
+                console.log('📱 WHATSAPP LOGIN REQUIRED!');
+                console.log('Scan the QR Code below with your WhatsApp:');
+                console.log('==========================================');
+                qrcode_terminal_1.default.generate(qr, { small: true });
+            });
+            this.client.on('ready', () => {
+                this.isReady = true;
+                console.log('✅ WhatsApp Client is READY!');
+            });
+            this.client.on('disconnected', (reason) => {
+                console.log('❌ WhatsApp Client was disconnected:', reason);
+                this.isReady = false;
+            });
+            this.client.on('auth_failure', (msg) => {
+                console.error('❌ WhatsApp auth failure:', msg);
+                this.isReady = false;
+            });
+            this.client.initialize().catch((err) => {
+                console.error('❌ WhatsApp failed to initialize (server continues without WhatsApp):', err.message);
+            });
+        }
+        catch (err) {
+            console.error('❌ WhatsApp setup error (server continues without WhatsApp):', err.message);
+        }
     }
     static async sendGroupMessage(groupName, text) {
         if (!this.client || !this.isReady) {

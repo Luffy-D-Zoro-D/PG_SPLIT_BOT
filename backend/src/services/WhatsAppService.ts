@@ -11,36 +11,48 @@ export class WhatsAppService {
   static initialize() {
     console.log('Initializing WhatsApp Client...');
     
-    // We use LocalAuth to save session data so we don't need to scan QR code every time
-    this.client = new Client({
-      authStrategy: new LocalAuth(),
-      puppeteer: {
-        args: ['--no-sandbox', '--disable-setuid-sandbox']
-      },
-      webVersionCache: {
-        type: 'none'
-      }
-    });
+    try {
+      // We use LocalAuth to save session data so we don't need to scan QR code every time
+      this.client = new Client({
+        authStrategy: new LocalAuth(),
+        puppeteer: {
+          args: ['--no-sandbox', '--disable-setuid-sandbox'],
+          executablePath: process.env.PUPPETEER_EXECUTABLE_PATH || undefined
+        },
+        webVersionCache: {
+          type: 'none'
+        }
+      });
 
-    this.client.on('qr', (qr) => {
-      console.log('==========================================');
-      console.log('📱 WHATSAPP LOGIN REQUIRED!');
-      console.log('Scan the QR Code below with your WhatsApp:');
-      console.log('==========================================');
-      qrcode.generate(qr, { small: true });
-    });
+      this.client.on('qr', (qr) => {
+        console.log('==========================================');
+        console.log('📱 WHATSAPP LOGIN REQUIRED!');
+        console.log('Scan the QR Code below with your WhatsApp:');
+        console.log('==========================================');
+        qrcode.generate(qr, { small: true });
+      });
 
-    this.client.on('ready', () => {
-      this.isReady = true;
-      console.log('✅ WhatsApp Client is READY!');
-    });
+      this.client.on('ready', () => {
+        this.isReady = true;
+        console.log('✅ WhatsApp Client is READY!');
+      });
 
-    this.client.on('disconnected', (reason) => {
-      console.log('❌ WhatsApp Client was disconnected:', reason);
-      this.isReady = false;
-    });
+      this.client.on('disconnected', (reason) => {
+        console.log('❌ WhatsApp Client was disconnected:', reason);
+        this.isReady = false;
+      });
 
-    this.client.initialize();
+      this.client.on('auth_failure', (msg) => {
+        console.error('❌ WhatsApp auth failure:', msg);
+        this.isReady = false;
+      });
+
+      this.client.initialize().catch((err: any) => {
+        console.error('❌ WhatsApp failed to initialize (server continues without WhatsApp):', err.message);
+      });
+    } catch (err: any) {
+      console.error('❌ WhatsApp setup error (server continues without WhatsApp):', err.message);
+    }
   }
 
   static async sendGroupMessage(groupName: string, text: string): Promise<boolean> {
