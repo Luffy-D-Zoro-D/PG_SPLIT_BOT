@@ -74,14 +74,18 @@ Analyze the text and output ONLY a valid JSON object matching this structure:
 }
 
 Rules:
-1. FIRST, determine if the user is actually trying to record a financial expense. If the message is a general question, math problem, greeting, or casual conversation, set intent="CHAT" and provide a helpful, friendly response in "chatResponse".
-2. If it IS an expense but information is ambiguous (missing amounts or missing people), set intent="CREATE_EXPENSE", needsClarification=true, and ask a clarificationQuestion ALWAYS in English.
-3. If the user states a direct debt like "A owes B X amount", treat this as an expense where B is the "paidBy" (creditor) and A has a personalExpense (debtor).
-4. You must map users to one of the provided Group members.
-5. If the user mentions names that are NOT in the Group members list, set needsClarification=true and explain in English that you can only track expenses for members currently in this Telegram group. Ask them to add those users to the group.
-6. Generate a line-by-line detailed "itemsBreakdown" array for every purchased item. Format example: ["khari : 60rs -> split - 30 each", "milk : 39 rs -> split - 19.5", "poha -> anuj -> 30rs"]. This provides clarity to the users exactly what each item cost and how it was split.
-7. If intent is completely unrecognizable, set intent="UNKNOWN".
-8. Output strictly JSON. Do not include markdown code blocks around the JSON.
+1. STRICT MATH RULE: totalAmount MUST EQUAL (sharedExpense.amount + sum of all personalExpenses.amount).
+   - Example 1: "I paid 80 for Anuj" -> totalAmount: 80, sharedExpense: { amount: 0, participants: [] }, personalExpenses: [{ user: "Anuj", amount: 80 }]. (Anuj owes 80). DO NOT put 80 in shared AND 80 in personal!
+   - Example 2: "I paid 80 for dinner split with Anuj" -> totalAmount: 80, sharedExpense: { amount: 80, splitType: "EQUAL", participants: [{ user: "Payer", share: 40 }, { user: "Anuj", share: 40 }] }, personalExpenses: [].
+   - Example 3: "I paid 100 total, 60 for shared food with Anuj, and 40 for Anuj personal medicine" -> totalAmount: 100, sharedExpense: { amount: 60, ... }, personalExpenses: [{ user: "Anuj", amount: 40 }].
+2. CORRECTIONS & CANCEL: If the user says "forget...", "cancel...", "ignore...", or provides a corrected statement, ignore past erroneous context in chat history and evaluate strictly based on the user's latest correction.
+3. FIRST, determine if the user is actually trying to record a financial expense. If the message is a general question, math problem, greeting, or casual conversation, set intent="CHAT" and provide a helpful, friendly response in "chatResponse".
+4. If it IS an expense but information is ambiguous (missing amounts or missing people), set intent="CREATE_EXPENSE", needsClarification=true, and ask a clarificationQuestion ALWAYS in English.
+5. If the user states a direct debt like "A owes B X amount", treat this as an expense where B is the "paidBy" (creditor) and A has a personalExpense (debtor).
+6. You must map users to one of the provided Group members.
+7. If the user mentions names that are NOT in the Group members list, set needsClarification=true and explain in English that you can only track expenses for members currently in this Telegram group. Ask them to add those users to the group.
+8. Generate a line-by-line detailed "itemsBreakdown" array for every purchased item. Format example: ["khari : 60rs -> split - 30 each", "milk : 39 rs -> split - 19.5", "poha -> anuj -> 30rs"].
+9. Output strictly JSON. Do not include markdown code blocks around the JSON.
 `;
 
         const messages: any[] = [{ role: 'system', content: prompt }];

@@ -75,6 +75,23 @@ export class ExpenseService {
       }
     }
 
+    // Auto-reconcile math if AI accidentally placed full amount in both shared AND personal
+    if (!totalAmount.equals(sharedAmount.plus(sumPersonal))) {
+      if (sharedAmount.equals(totalAmount) && sumPersonal.equals(totalAmount)) {
+        // AI duplicated amount: e.g. "I paid 80 for Anuj" is 100% personal for Anuj
+        console.log(`[Auto-Reconcile]: AI duplicated total amount in both shared and personal. Converting to 100% personal expense.`);
+        sharedAmount = new Decimal(0);
+        if (extraction.sharedExpense) {
+          extraction.sharedExpense.amount = 0;
+          extraction.sharedExpense.participants = [];
+        }
+      } else if (sharedAmount.equals(0) && sumPersonal.equals(0)) {
+        // Default to 100% shared
+        sharedAmount = totalAmount;
+        if (extraction.sharedExpense) extraction.sharedExpense.amount = totalAmount.toNumber();
+      }
+    }
+
     if (!totalAmount.equals(sharedAmount.plus(sumPersonal))) {
       return { error: `The amounts don't add up.\nTotal: ${totalAmount}\nShared + Personal: ${sharedAmount.plus(sumPersonal)}\n\nPlease clarify.` };
     }

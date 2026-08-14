@@ -14,7 +14,7 @@ import path from 'path';
 import ProcessedUpdate from '../models/ProcessedUpdate';
 
 
-const chatHistories = new Map<number, { role: string, content: string }[]>();
+const chatHistories = new Map<number, { role: string, content: string, imageUrl?: string }[]>();
 
 export class TelegramWebhookController {
   static async handleUpdate(req: Request, res: Response) {
@@ -37,8 +37,11 @@ export class TelegramWebhookController {
 
       // If there is a callback query (button press)
       if (update.callback_query) {
-        await TelegramWebhookController.handleCallbackQuery(update.callback_query);
-        return res.sendStatus(200);
+        res.sendStatus(200);
+        TelegramWebhookController.handleCallbackQuery(update.callback_query).catch((e: any) => {
+          console.error('Error handling callback query:', e);
+        });
+        return;
       }
 
       // If there is a message
@@ -63,8 +66,10 @@ export class TelegramWebhookController {
 
     // Handle photo uploads
     if (message.photo && message.photo.length > 0) {
-      const highestResPhoto = message.photo[message.photo.length - 1];
-      const telegramFilePath = await TelegramService.getFile(highestResPhoto.file_id);
+      // Pick medium/high res photo to keep base64 compact (~80KB) while sharp
+      const photoIndex = Math.min(message.photo.length - 1, 2);
+      const selectedPhoto = message.photo[photoIndex];
+      const telegramFilePath = await TelegramService.getFile(selectedPhoto.file_id);
 
       if (telegramFilePath) {
         const destName = `img_${Date.now()}.jpg`;
@@ -80,6 +85,27 @@ export class TelegramWebhookController {
 
       if (!text) {
         text = "I attached a receipt. Please record this expense.";
+      }
+    }
+
+    // Handle document image uploads (e.g. uncompressed images attached as files)
+    if (!imageUrl && message.document && message.document.mime_type?.startsWith('image/')) {
+      const telegramFilePath = await TelegramService.getFile(message.document.file_id);
+
+      if (telegramFilePath) {
+        const destName = `img_${Date.now()}.jpg`;
+        const destPath = path.join(process.cwd(), 'uploads', destName);
+        const localPath = await TelegramService.downloadFile(telegramFilePath, destPath);
+
+        if (localPath) {
+          const fileBuffer = fs.readFileSync(localPath);
+          imageUrl = `data:${message.document.mime_type};base64,${fileBuffer.toString('base64')}`;
+          try { fs.unlinkSync(localPath); } catch (e) {}
+        }
+      }
+
+      if (!text) {
+        text = "I attached a receipt file. Please record this expense.";
       }
     }
 
@@ -115,6 +141,7 @@ export class TelegramWebhookController {
     await User.findOneAndUpdate(
       { telegramUserId: from.id },
       {
+        telegramUserId: from.id,
         username: from.username,
         firstName: from.first_name,
         lastName: from.last_name
@@ -145,11 +172,21 @@ export class TelegramWebhookController {
       return;
     }
 
-    // Update chat history with user's message
+    // Update chat history with user's message and preserve imageUrl across conversation turns
     if (!chatHistories.has(chatId)) chatHistories.set(chatId, []);
     const history = chatHistories.get(chatId)!;
-    history.push({ role: 'user', content: text });
+    history.push({ role: 'user', content: text, imageUrl: imageUrl });
     if (history.length > 6) history.shift(); // Keep last 6 messages
+
+    // If current message has no image attached, check recent history for an image uploaded in this conversation turn
+    if (!imageUrl) {
+      for (let i = history.length - 1; i >= 0; i--) {
+        if (history[i].imageUrl) {
+          imageUrl = history[i].imageUrl;
+          break;
+        }
+      }
+    }
 
     // 4. Process natural language
     console.log(`\n--- NEW MESSAGE ---`);
@@ -260,9 +297,17 @@ export class TelegramWebhookController {
   }
 
   private static async handleCallbackQuery(callbackQuery: any) {
+    // 1. Immediately answer callback query so Telegram stops loading spinner on button
+    await TelegramService.answerCallbackQuery(callbackQuery.id).catch(() => {});
+
     const data = callbackQuery.data;
     const message = callbackQuery.message;
     const chatId = message.chat.id;
+
+    // Remove buttons from original message to prevent stale or duplicate clicks
+    if (message && message.message_id) {
+      await TelegramService.editMessageReplyMarkup(chatId, message.message_id, { inline_keyboard: [] }).catch(() => {});
+    }
 
     if (data.startsWith('confirm_')) {
       const expenseId = data.split('_')[1];
@@ -286,8 +331,6 @@ export class TelegramWebhookController {
         msg += `💰 Total: ₹${expense.totalAmount}\n`;
         msg += `👤 Paid by: ${payerName}\n`;
         msg += `📅 ${new Date().toLocaleString('en-IN', { timeZone: 'Asia/Kolkata' })}\n`;
-
-
 
         // Shared split
         if (parseFloat(expense.sharedAmount) > 0 && expense.sharedParticipants.length > 0) {
@@ -342,10 +385,13 @@ export class TelegramWebhookController {
         // Send rich message to Telegram
         await TelegramService.sendMessage(chatId, msg);
 
-        // Optionally send to WhatsApp (replacing HTML bold with WhatsApp asterisk bold)
-        if (process.env.WHATSAPP_GROUP_NAME) {
+        // Optionally send to WhatsApp asynchronously without blocking Telegram webhook response
+        const waGroupName = process.env.WHATSAPP_GROUP_NAME || 'BOTTY';
+        if (WhatsAppService.getNotificationsEnabled() || process.env.WHATSAPP_GROUP_NAME) {
           const waMsg = msg.replace(/<b>/g, '*').replace(/<\/b>/g, '*');
-          await WhatsAppService.sendGroupMessage(process.env.WHATSAPP_GROUP_NAME, waMsg);
+          WhatsAppService.sendGroupMessage(waGroupName, waMsg, expense.imageUrl).catch((e: any) => {
+            console.error('WhatsApp send error:', e.message || e);
+          });
         }
       }
     } else if (data.startsWith('cancel_')) {
@@ -410,9 +456,12 @@ export class TelegramWebhookController {
           const msg = `✅ <b>Settlement Confirmed!</b>\n\n${debtorName} has settled ₹${settlement.amount} with ${creditorName}.`;
           await TelegramService.sendMessage(chatId, msg);
 
-          if (process.env.WHATSAPP_GROUP_NAME) {
+          const waGroupName = process.env.WHATSAPP_GROUP_NAME || 'BOTTY';
+          if (WhatsAppService.getNotificationsEnabled() || process.env.WHATSAPP_GROUP_NAME) {
             const waMsg = `✅ *Settlement Confirmed!*\n\n${debtorName} has settled ₹${settlement.amount} with ${creditorName}.`;
-            await WhatsAppService.sendGroupMessage(process.env.WHATSAPP_GROUP_NAME, waMsg);
+            WhatsAppService.sendGroupMessage(waGroupName, waMsg).catch((e: any) => {
+              console.error('WhatsApp send error:', e.message || e);
+            });
           }
         }
       } else {

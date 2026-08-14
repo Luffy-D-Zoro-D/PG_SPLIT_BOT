@@ -30,6 +30,38 @@ export class TelegramService {
     }
   }
 
+  /**
+   * Answer a callback query to stop the loading spinner on Telegram buttons
+   */
+  static async answerCallbackQuery(callbackQueryId: string, text?: string, showAlert: boolean = false): Promise<void> {
+    if (!process.env.TELEGRAM_BOT_TOKEN) return;
+    try {
+      await axios.post(`${getTelegramApiUrl()}/answerCallbackQuery`, {
+        callback_query_id: callbackQueryId,
+        text,
+        show_alert: showAlert
+      });
+    } catch (e: any) {
+      console.error('Failed to answer callback query:', e?.response?.data || e.message);
+    }
+  }
+
+  /**
+   * Edit reply markup of an existing message (e.g. to remove or update inline keyboard buttons)
+   */
+  static async editMessageReplyMarkup(chatId: number, messageId: number, replyMarkup?: any): Promise<void> {
+    if (!process.env.TELEGRAM_BOT_TOKEN) return;
+    try {
+      await axios.post(`${getTelegramApiUrl()}/editMessageReplyMarkup`, {
+        chat_id: chatId,
+        message_id: messageId,
+        reply_markup: replyMarkup
+      });
+    } catch (e: any) {
+      console.error('Failed to edit message reply markup:', e?.response?.data || e.message);
+    }
+  }
+
   static async setWebhook(url: string): Promise<boolean> {
     if (!process.env.TELEGRAM_BOT_TOKEN) return false;
     

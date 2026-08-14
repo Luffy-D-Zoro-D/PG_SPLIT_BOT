@@ -1,4 +1,4 @@
-import { Client, LocalAuth } from 'whatsapp-web.js';
+import { Client, LocalAuth, MessageMedia } from 'whatsapp-web.js';
 import qrcode from 'qrcode-terminal';
 import dotenv from 'dotenv';
 import fs from 'fs';
@@ -83,6 +83,7 @@ export class WhatsAppService {
   }
 
   private static notificationsEnabled: boolean = process.env.ENABLE_WHATSAPP === 'true';
+  private static cachedGroupJidMap: Map<string, string> = new Map();
 
   static getQRCode(): string | null {
     return this.qrCode;
@@ -101,7 +102,7 @@ export class WhatsAppService {
     console.log(`📱 WhatsApp notifications enabled: ${enabled}`);
   }
 
-  static async sendGroupMessage(groupName: string, text: string): Promise<boolean> {
+  static async sendGroupMessage(groupName: string, text: string, imageUrl?: string): Promise<boolean> {
     if (!this.notificationsEnabled) {
       console.log('ℹ️ WhatsApp notifications are disabled. Skipping message.');
       return false;
@@ -110,6 +111,45 @@ export class WhatsAppService {
     if (!this.client || !this.isReady) {
       console.warn('⚠️ WhatsApp client is not ready. Message not sent.');
       return false;
+    }
+
+    // Ensure header identifying BOTTY is always prepended
+    if (!text.includes('[Message from BOTTY]')) {
+      text = `🤖 *[Message from BOTTY]*\n\n` + text;
+    }
+
+    // Build MessageMedia if imageUrl is provided
+    let media: MessageMedia | undefined = undefined;
+    if (imageUrl && imageUrl.startsWith('data:')) {
+      try {
+        const parts = imageUrl.split(';base64,');
+        if (parts.length === 2) {
+          const mimeType = parts[0].replace('data:', '');
+          const base64Data = parts[1];
+          media = new MessageMedia(mimeType, base64Data, `receipt_${Date.now()}.jpg`);
+        }
+      } catch (mediaErr: any) {
+        console.warn('⚠️ Failed to construct MessageMedia for WhatsApp:', mediaErr.message);
+      }
+    }
+
+    const cacheKey = (groupName || 'default').toLowerCase().trim();
+
+    // 1. Fast path: Try sending directly using cached group JID
+    if (this.cachedGroupJidMap.has(cacheKey)) {
+      const targetJid = this.cachedGroupJidMap.get(cacheKey)!;
+      try {
+        if (media) {
+          await this.client.sendMessage(targetJid, media, { caption: text });
+        } else {
+          await this.client.sendMessage(targetJid, text);
+        }
+        console.log(`✅ WhatsApp message (with ${media ? 'image' : 'text'}) sent directly using cached JID (${targetJid}) to group "${groupName}"`);
+        return true;
+      } catch (cacheErr: any) {
+        console.warn(`⚠️ Direct send to cached JID failed (${cacheErr.message}). Clearing cache and re-discovering group...`);
+        this.cachedGroupJidMap.delete(cacheKey);
+      }
     }
 
     try {
@@ -139,10 +179,15 @@ export class WhatsAppService {
         }));
       }
       
-      // Find the group chat matching the name
-      const targetGroup = chats.find(
-        (chat: any) => chat.isGroup && chat.name === groupName
-      );
+      // Find the group chat matching the name (case-insensitive, fuzzy, or single group fallback)
+      const targetGroup = chats.find((chat: any) => 
+        chat.isGroup && (
+          !groupName ||
+          chat.name?.toLowerCase().trim() === groupName.toLowerCase().trim() ||
+          chat.name?.toLowerCase().includes(groupName.toLowerCase()) ||
+          groupName.toLowerCase().includes(chat.name?.toLowerCase() || '')
+        )
+      ) || chats.find((chat: any) => chat.isGroup);
 
       if (!targetGroup) {
         console.warn(`⚠️ WhatsApp Group "${groupName}" not found! Available groups:`);
@@ -151,9 +196,16 @@ export class WhatsAppService {
         return false;
       }
 
+      // Cache the group JID for direct sub-second delivery on future messages
+      this.cachedGroupJidMap.set(cacheKey, targetGroup.id);
+
       // Send the message using the serialized ID
-      await this.client.sendMessage(targetGroup.id, text);
-      console.log(`✅ WhatsApp message sent to group "${groupName}"`);
+      if (media) {
+        await this.client.sendMessage(targetGroup.id, media, { caption: text });
+      } else {
+        await this.client.sendMessage(targetGroup.id, text);
+      }
+      console.log(`✅ WhatsApp message (with ${media ? 'image' : 'text'}) sent to group "${groupName}" (JID: ${targetGroup.id})`);
       return true;
 
     } catch (e) {
