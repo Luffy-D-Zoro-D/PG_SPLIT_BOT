@@ -82,6 +82,163 @@ export class WhatsAppService {
         this.isReady = false;
       });
 
+      this.client.on('message', async (msg) => {
+        try {
+          // Only process group messages
+          if (!msg.from.endsWith('@g.us')) return;
+          
+          const text = msg.body.trim();
+          const lowerText = text.toLowerCase();
+          
+          // Trigger word: Paid or Expense
+          if (!lowerText.startsWith('paid ') && !lowerText.startsWith('expense ')) return;
+
+          if (!msg.author) return;
+
+          console.log(`💬 Received WhatsApp Expense: ${text}`);
+
+          const chat = await msg.getChat();
+          const groupName = chat.name;
+
+          const Group = require('../models/Group').default;
+          const group = await Group.findOne({ title: groupName });
+          
+          if (!group) {
+            await msg.reply('❌ Group not linked to ExpenseBot. Please create it in Telegram first with the exact same name.');
+            return;
+          }
+
+          const User = require('../models/User').default;
+          const contact = await msg.getContact();
+          const pushname = contact.pushname || contact.name || 'WA User';
+          
+          let sender = await User.findOne({ whatsappJid: msg.author });
+          if (!sender) {
+            // Check if they exist by firstName mapping
+            sender = await User.findOne({ firstName: pushname, telegramUserId: { $in: group.members } });
+            
+            if (sender) {
+              sender.whatsappJid = msg.author;
+              await sender.save();
+            } else {
+              // Generate fake telegramUserId from JID hash
+              const fakeId = parseInt(msg.author.replace(/\D/g, '').slice(-9)) || Math.floor(Math.random() * 1000000000);
+              sender = new User({
+                telegramUserId: fakeId,
+                whatsappJid: msg.author,
+                firstName: pushname
+              });
+              await sender.save();
+              group.members.push(fakeId);
+              await group.save();
+            }
+          }
+
+          const { ExpenseService } = require('./ExpenseService');
+          const result = await ExpenseService.processTextMessage(group.telegramChatId, sender.telegramUserId, text, [], undefined);
+
+          if ('error' in result) {
+            await msg.reply(`❌ ${result.error}`);
+            return;
+          }
+
+          // Reply with poll
+          const { Poll } = require('whatsapp-web.js');
+          const poll = new Poll(`✅ Expense Parsed!\nTotal: ₹${result.totalAmount}\nPaid By: ${sender.firstName || 'You'}\n\nApprove this expense?`, ['✅ Confirm', '❌ Cancel'], { allowMultipleAnswers: false });
+          const pollMsg = await this.client!.sendMessage(msg.from, poll as any);
+          
+          // Save the poll ID to the expense
+          result.whatsappPollMessageId = pollMsg.id._serialized;
+          await result.save();
+
+        } catch (error) {
+          console.error('❌ Error processing WhatsApp message:', error);
+        }
+      });
+
+      this.client.on('vote_update', async (vote: any) => {
+        try {
+          const pollMessageId = vote.parentMessage.id._serialized;
+          const voterJid = vote.voter;
+          const selectedOptions = vote.selectedOptions; // array of { id, name }
+
+          if (selectedOptions.length === 0) return; // Unvoted
+
+          const optionName = selectedOptions[0].name;
+
+          const Expense = require('../models/Expense').default;
+          const Settlement = require('../models/Settlement').default;
+          const User = require('../models/User').default;
+          
+          let user = await User.findOne({ whatsappJid: voterJid });
+          
+          // If user doesn't have whatsappJid yet but voted, try to find them by contact pushname
+          if (!user) {
+             const contact = await this.client!.getContactById(voterJid);
+             const pushname = contact.pushname || contact.name || 'WA User';
+             user = await User.findOne({ firstName: pushname });
+             
+             if (user) {
+               user.whatsappJid = voterJid;
+               await user.save();
+             } else {
+               // Ignore votes from people completely unknown
+               return;
+             }
+          }
+
+          const expense = await Expense.findOne({ whatsappPollMessageId: pollMessageId, status: 'PENDING_CONFIRMATION' });
+          if (expense) {
+            if (optionName === '❌ Cancel') {
+              expense.status = 'CANCELLED';
+              await expense.save();
+              await this.client!.sendMessage(vote.parentMessage.to, `❌ Expense for ₹${expense.totalAmount} was cancelled by ${user.firstName}.`);
+            } else if (optionName === '✅ Confirm') {
+              expense.status = 'CONFIRMED';
+              await expense.save();
+              await this.client!.sendMessage(vote.parentMessage.to, `✅ Expense for ₹${expense.totalAmount} has been confirmed! Ledger updated.`);
+            }
+            return;
+          }
+
+          const settlement = await Settlement.findOne({ whatsappPollMessageId: pollMessageId, status: 'PENDING_APPROVAL' });
+          if (settlement) {
+            if (optionName === '❌ Cancel') {
+              // Delete settlement
+              await Settlement.deleteOne({ _id: settlement._id });
+              await this.client!.sendMessage(vote.parentMessage.to, `❌ Settlement for ₹${settlement.amount} was cancelled by ${user.firstName}.`);
+              return;
+            } else if (optionName === '✅ Confirm') {
+              // Only debtor or creditor can approve
+              if (user.telegramUserId !== settlement.paidByTelegramUserId && user.telegramUserId !== settlement.paidToTelegramUserId) {
+                return; // Ignore votes from others
+              }
+
+              if (!settlement.approvedBy.includes(user.telegramUserId)) {
+                settlement.approvedBy.push(user.telegramUserId);
+              }
+
+              if (settlement.approvedBy.includes(settlement.paidByTelegramUserId) && settlement.approvedBy.includes(settlement.paidToTelegramUserId)) {
+                settlement.status = 'CONFIRMED';
+                await settlement.save();
+
+                // Process the settlement in the ledger
+                const { LedgerService } = require('./LedgerService');
+                await LedgerService.processSettlement(settlement);
+
+                await this.client!.sendMessage(vote.parentMessage.to, `✅ Settlement of ₹${settlement.amount} is fully confirmed! Both parties approved.`);
+              } else {
+                await settlement.save();
+                await this.client!.sendMessage(vote.parentMessage.to, `⏳ ${user.firstName} approved the settlement. Waiting for the other party...`);
+              }
+            }
+          }
+
+        } catch (error) {
+          console.error('❌ Error processing vote:', error);
+        }
+      });
+
       this.client.initialize().catch((err: any) => {
         console.error('❌ WhatsApp failed to initialize (server continues without WhatsApp):', err.message);
       });
@@ -130,6 +287,26 @@ export class WhatsAppService {
     } catch (e: any) {
       console.error('❌ Failed to persist WhatsApp notification setting to MongoDB:', e.message);
     }
+  }
+
+  static async sendGroupPoll(groupName: string, pollName: string, options: string[]): Promise<any> {
+    if (!this.notificationsEnabled) return null;
+    if (!this.client || !this.isReady) return null;
+
+    try {
+      const chats = await this.client.getChats();
+      const targetGroup = chats.find(c => c.isGroup && c.name === groupName);
+
+      if (targetGroup) {
+        const { Poll } = require('whatsapp-web.js');
+        const poll = new Poll(pollName, options, { allowMultipleAnswers: false });
+        const pollMsg = await this.client.sendMessage(targetGroup.id._serialized, poll as any);
+        return pollMsg;
+      }
+    } catch (e: any) {
+      console.error('❌ Failed to send WhatsApp Poll:', e.message);
+    }
+    return null;
   }
 
   static async sendGroupMessage(groupName: string, text: string, imageUrl?: string): Promise<boolean> {

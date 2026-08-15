@@ -7,6 +7,7 @@ export interface ISettlement extends Document {
   amount: string; // Decimal stored as string
   status: 'PENDING_APPROVAL' | 'CONFIRMED';
   approvedBy: number[]; // Array of telegramUserIds
+  whatsappPollMessageId?: string;
   createdAt: Date;
 }
 
@@ -16,7 +17,8 @@ const SettlementSchema: Schema = new Schema({
   paidToTelegramUserId: { type: Number, required: true },
   amount: { type: String, required: true },
   status: { type: String, enum: ['PENDING_APPROVAL', 'CONFIRMED'], default: 'PENDING_APPROVAL' },
-  approvedBy: { type: [Number], default: [] }
+  approvedBy: { type: [Number], default: [] },
+  whatsappPollMessageId: { type: String, required: false }
 }, {
   timestamps: true
 });

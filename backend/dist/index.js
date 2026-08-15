@@ -43,7 +43,8 @@ app.get('/api/debug-whatsapp', (req, res) => {
     res.send({
         qrCodeValue: WhatsAppService_1.WhatsAppService.getQRCode(),
         isReady: WhatsAppService_1.WhatsAppService.getIsReady(),
-        hasClient: !!WhatsAppService_1.WhatsAppService.client
+        hasClient: !!WhatsAppService_1.WhatsAppService.client,
+        notificationsEnabled: WhatsAppService_1.WhatsAppService.getNotificationsEnabled()
     });
 });
 app.get('/api/whatsapp-status', (req, res) => {

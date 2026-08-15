@@ -22,6 +22,7 @@ export interface IExpense extends Document {
   personalExpenses: IParticipantShare[];
   itemsBreakdown: string[];
   imageUrl?: string;
+  whatsappPollMessageId?: string;
   createdAt: Date;
   updatedAt: Date;
 }
@@ -42,6 +43,7 @@ const ExpenseSchema: Schema = new Schema({
   personalExpenses: { type: [ParticipantShareSchema], default: [] },
   itemsBreakdown: { type: [String], default: [] },
   imageUrl: { type: String },
+  whatsappPollMessageId: { type: String, required: false }
 }, {
   timestamps: true
 });

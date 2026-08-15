@@ -248,6 +248,20 @@ export class DashboardController {
           ]
         };
         await TelegramService.sendMessage(chatId, text, replyMarkup);
+
+        // Also send WhatsApp Poll
+        const Group = require('../models/Group').default;
+        const group = await Group.findOne({ telegramChatId: chatId });
+        if (group) {
+          const { WhatsAppService } = require('../services/WhatsAppService');
+          const pollName = `💸 Settlement Request\n\n${debtorName} wants to settle ₹${amount} with ${creditorName}.`;
+          const pollMsg = await WhatsAppService.sendGroupPoll(group.title, pollName, ['✅ Confirm', '❌ Cancel']);
+          
+          if (pollMsg) {
+            settlement.whatsappPollMessageId = pollMsg.id._serialized;
+            await settlement.save();
+          }
+        }
       }
 
       res.json({ success: true, settlement });

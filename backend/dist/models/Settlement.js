@@ -40,7 +40,8 @@ const SettlementSchema = new mongoose_1.Schema({
     paidToTelegramUserId: { type: Number, required: true },
     amount: { type: String, required: true },
     status: { type: String, enum: ['PENDING_APPROVAL', 'CONFIRMED'], default: 'PENDING_APPROVAL' },
-    approvedBy: { type: [Number], default: [] }
+    approvedBy: { type: [Number], default: [] },
+    whatsappPollMessageId: { type: String, required: false }
 }, {
     timestamps: true
 });
