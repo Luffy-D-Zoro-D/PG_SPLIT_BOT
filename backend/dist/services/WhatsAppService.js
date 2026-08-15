@@ -8,6 +8,7 @@ const whatsapp_web_js_1 = require("whatsapp-web.js");
 const qrcode_terminal_1 = __importDefault(require("qrcode-terminal"));
 const dotenv_1 = __importDefault(require("dotenv"));
 const fs_1 = __importDefault(require("fs"));
+const Setting_1 = require("../models/Setting");
 dotenv_1.default.config();
 // Railway mounts a persistent volume at this path so the WhatsApp session
 // survives across deployments/restarts, avoiding a re-scan of the QR code.
@@ -43,10 +44,11 @@ class WhatsAppService {
                         '--no-first-run'
                     ],
                     executablePath: process.env.PUPPETEER_EXECUTABLE_PATH || undefined,
-                    protocolTimeout: 120000, // 120s timeout
+                    protocolTimeout: 60000, // 60s timeout
                 },
                 webVersionCache: {
-                    type: 'none'
+                    type: 'remote',
+                    remotePath: 'https://raw.githubusercontent.com/wppconnect-team/wa-version/main/html/2.3000.1045270340-alpha.html'
                 }
             });
             this.client.on('qr', (qr) => {
@@ -86,12 +88,31 @@ class WhatsAppService {
     static getIsReady() {
         return this.isReady;
     }
+    static async loadSettingsFromDb() {
+        try {
+            const setting = await Setting_1.Setting.findOne({ key: 'whatsapp_notifications_enabled' });
+            if (setting && typeof setting.value === 'boolean') {
+                this.notificationsEnabled = setting.value;
+                console.log(`📱 Loaded WhatsApp notification setting from MongoDB: ${this.notificationsEnabled}`);
+            }
+        }
+        catch (e) {
+            console.warn('⚠️ Could not load WhatsApp notification setting from MongoDB:', e.message);
+        }
+    }
     static getNotificationsEnabled() {
         return this.notificationsEnabled;
     }
-    static setNotificationsEnabled(enabled) {
+    static async setNotificationsEnabled(enabled) {
         this.notificationsEnabled = enabled;
         console.log(`📱 WhatsApp notifications enabled: ${enabled}`);
+        try {
+            await Setting_1.Setting.findOneAndUpdate({ key: 'whatsapp_notifications_enabled' }, { value: enabled }, { upsert: true, returnDocument: 'after' });
+            console.log(`💾 Saved WhatsApp notification preference (${enabled}) to MongoDB`);
+        }
+        catch (e) {
+            console.error('❌ Failed to persist WhatsApp notification setting to MongoDB:', e.message);
+        }
     }
     static async sendGroupMessage(groupName, text, imageUrl) {
         if (!this.notificationsEnabled) {
@@ -126,12 +147,21 @@ class WhatsAppService {
         if (this.cachedGroupJidMap.has(cacheKey)) {
             const targetJid = this.cachedGroupJidMap.get(cacheKey);
             try {
-                if (media) {
-                    await this.client.sendMessage(targetJid, media, { caption: text });
-                }
-                else {
-                    await this.client.sendMessage(targetJid, text);
-                }
+                console.log(`🚀 [WhatsApp] Dispatching message to JID: ${targetJid}`);
+                const sendPromise = (async () => {
+                    const chat = await this.client.getChatById(targetJid);
+                    if (media) {
+                        return await chat.sendMessage(media, { caption: text });
+                    }
+                    else {
+                        return await chat.sendMessage(text);
+                    }
+                })();
+                // Wrap in a 30-second timeout to prevent indefinite hangs
+                await Promise.race([
+                    sendPromise,
+                    new Promise((_, reject) => setTimeout(() => reject(new Error('sendMessage timed out after 30 seconds')), 30000))
+                ]);
                 console.log(`✅ WhatsApp message (with ${media ? 'image' : 'text'}) sent directly using cached JID (${targetJid}) to group "${groupName}"`);
                 return true;
             }
@@ -179,13 +209,20 @@ class WhatsAppService {
             }
             // Cache the group JID for direct sub-second delivery on future messages
             this.cachedGroupJidMap.set(cacheKey, targetGroup.id);
-            // Send the message using the serialized ID
-            if (media) {
-                await this.client.sendMessage(targetGroup.id, media, { caption: text });
-            }
-            else {
-                await this.client.sendMessage(targetGroup.id, text);
-            }
+            console.log(`🚀 [WhatsApp] Dispatching message to JID (fallback): ${targetGroup.id}`);
+            const sendPromise = (async () => {
+                const chat = await this.client.getChatById(targetGroup.id);
+                if (media) {
+                    return await chat.sendMessage(media, { caption: text });
+                }
+                else {
+                    return await chat.sendMessage(text);
+                }
+            })();
+            await Promise.race([
+                sendPromise,
+                new Promise((_, reject) => setTimeout(() => reject(new Error('sendMessage timed out after 30 seconds')), 30000))
+            ]);
             console.log(`✅ WhatsApp message (with ${media ? 'image' : 'text'}) sent to group "${groupName}" (JID: ${targetGroup.id})`);
             return true;
         }

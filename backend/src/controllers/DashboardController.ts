@@ -57,8 +57,9 @@ export class DashboardController {
       const groupId = parseInt(groupIdStr, 10);
       const dateFilter = DashboardController.getDateFilter(range);
 
-      // Clean up any cancelled or unconfirmed expenses from MongoDB Atlas
-      await Expense.deleteMany({ status: { $ne: 'CONFIRMED' } } as any);
+      // Clean up any explicitly cancelled or deleted expenses from MongoDB Atlas
+      // Do NOT delete PENDING_CONFIRMATION or they will vanish from Telegram before the user clicks Confirm!
+      await Expense.deleteMany({ status: { $in: ['CANCELLED', 'DELETED'] } } as any);
 
       const expenses = await Expense.find({ telegramChatId: groupId, status: 'CONFIRMED', ...dateFilter } as any).sort({ createdAt: -1 }).limit(50).lean();
       const settlements = await Settlement.find({ telegramChatId: groupId, status: { $in: ['CONFIRMED', 'PENDING_APPROVAL'] }, ...dateFilter } as any).sort({ createdAt: -1 }).limit(50).lean();

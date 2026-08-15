@@ -58,8 +58,9 @@ class DashboardController {
                 return res.status(400).json({ error: 'groupId is required' });
             const groupId = parseInt(groupIdStr, 10);
             const dateFilter = DashboardController.getDateFilter(range);
-            // Clean up any cancelled or unconfirmed expenses from MongoDB Atlas
-            await Expense_1.default.deleteMany({ status: { $ne: 'CONFIRMED' } });
+            // Clean up any explicitly cancelled or deleted expenses from MongoDB Atlas
+            // Do NOT delete PENDING_CONFIRMATION or they will vanish from Telegram before the user clicks Confirm!
+            await Expense_1.default.deleteMany({ status: { $in: ['CANCELLED', 'DELETED'] } });
             const expenses = await Expense_1.default.find({ telegramChatId: groupId, status: 'CONFIRMED', ...dateFilter }).sort({ createdAt: -1 }).limit(50).lean();
             const settlements = await Settlement_1.default.find({ telegramChatId: groupId, status: { $in: ['CONFIRMED', 'PENDING_APPROVAL'] }, ...dateFilter }).sort({ createdAt: -1 }).limit(50).lean();
             const userIds = new Set();

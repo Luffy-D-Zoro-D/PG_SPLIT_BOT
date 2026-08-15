@@ -74,9 +74,10 @@ function startServer() {
     });
     // Connect to MongoDB in the background. The HTTP server does not wait on this.
     mongoose_1.default.connect(MONGO_URI)
-        .then(() => {
+        .then(async () => {
         console.log('✅ Connected to MongoDB');
         console.log('MongoDB URL:', MONGO_URI);
+        await WhatsAppService_1.WhatsAppService.loadSettingsFromDb();
     })
         .catch((e) => {
         console.error('❌ Error connecting to MongoDB (server continues running):', e);

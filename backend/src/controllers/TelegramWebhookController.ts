@@ -304,15 +304,16 @@ export class TelegramWebhookController {
     const message = callbackQuery.message;
     const chatId = message.chat.id;
 
-    // Remove buttons from original message to prevent stale or duplicate clicks
-    if (message && message.message_id) {
-      await TelegramService.editMessageReplyMarkup(chatId, message.message_id, { inline_keyboard: [] }).catch(() => {});
-    }
 
     if (data.startsWith('confirm_')) {
       const expenseId = data.split('_')[1];
       const expense = await ExpenseService.confirmExpense(expenseId);
       if (expense) {
+        // Remove buttons from original message ONLY AFTER successful confirmation
+        if (message && message.message_id) {
+          await TelegramService.editMessageReplyMarkup(chatId, message.message_id, { inline_keyboard: [] }).catch(() => {});
+        }
+
         const payer = await User.findOne({ telegramUserId: expense.paidByTelegramUserId });
         const payerName = payer?.firstName || payer?.username || 'Unknown';
 
@@ -397,6 +398,12 @@ export class TelegramWebhookController {
     } else if (data.startsWith('cancel_')) {
       const expenseId = data.split('_')[1];
       await ExpenseService.cancelExpense(expenseId);
+      
+      // Remove buttons upon successful cancellation
+      if (message && message.message_id) {
+        await TelegramService.editMessageReplyMarkup(chatId, message.message_id, { inline_keyboard: [] }).catch(() => {});
+      }
+
       await TelegramService.sendMessage(chatId, `❌ Expense cancelled.`);
     } else if (data.startsWith('approve_settlement_')) {
       const parts = data.split('_');
