@@ -159,12 +159,21 @@ class DashboardController {
             const expense = await Expense_1.default.findById(id);
             if (!expense)
                 return res.status(404).json({ error: 'Expense not found' });
-            // Check if any confirmed settlements exist in this group AFTER the expense was created.
-            // (As a simplified safety rule, we block deletion if any settlements exist in the group to avoid complex time-travel calculations)
-            const settlementCount = await Settlement_1.default.countDocuments({
-                telegramChatId: expense.telegramChatId,
-                status: 'CONFIRMED'
-            });
+            const query = {
+                status: 'CONFIRMED',
+                createdAt: { $gt: expense.createdAt }
+            };
+            if (expense.telegramChatId) {
+                query.telegramChatId = expense.telegramChatId;
+            }
+            else if (expense.whatsappChatId) {
+                query.whatsappChatId = expense.whatsappChatId;
+            }
+            else {
+                // Fallback for older expenses
+                query.telegramChatId = null;
+            }
+            const settlementCount = await Settlement_1.default.countDocuments(query);
             if (settlementCount > 0) {
                 return res.status(400).json({
                     error: 'Cannot delete expense because settlements have already been confirmed in this group. Please create an offsetting adjustment expense instead.'
@@ -231,9 +240,9 @@ class DashboardController {
                 if (group) {
                     const { WhatsAppService } = require('../services/WhatsAppService');
                     const pollName = `💸 Settlement Request\n\n${debtorName} wants to settle ₹${amount} with ${creditorName}.`;
-                    const pollMsg = await WhatsAppService.sendGroupPoll(group.title, pollName, ['✅ Confirm', '❌ Cancel']);
-                    if (pollMsg) {
-                        settlement.whatsappPollMessageId = pollMsg.id._serialized;
+                    const pollId = await WhatsAppService.sendGroupPoll(group.title, pollName, ['✅ Confirm', '❌ Cancel']);
+                    if (pollId) {
+                        settlement.whatsappPollMessageId = pollId;
                         await settlement.save();
                     }
                 }

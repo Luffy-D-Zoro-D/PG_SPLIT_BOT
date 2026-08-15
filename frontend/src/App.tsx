@@ -251,12 +251,17 @@ export default function App() {
           const res = await fetch(endpoint, {
             method: 'DELETE'
           });
-          if (!res.ok) throw new Error('Failed to delete');
+          
+          if (!res.ok) {
+            const errorData = await res.json().catch(() => null);
+            throw new Error(errorData?.error || 'Failed to delete');
+          }
+          
           toast.success('Entry deleted successfully');
           await fetchData();
-        } catch (e) {
+        } catch (e: any) {
           console.error(e);
-          toast.error('Failed to delete entry');
+          toast.error(e.message || 'Failed to delete entry');
         }
       }
     });
@@ -634,7 +639,7 @@ export default function App() {
                           </div>
                         ) : entry.imageUrl ? (
                           <div className="w-10 h-10 sm:w-14 sm:h-14 rounded-lg sm:rounded-xl overflow-hidden border border-white/10 shadow-lg shrink-0 bg-slate-900 flex items-center justify-center">
-                            {/\.(mp3|wav|ogg|oga|m4a|aac)$/i.test(entry.imageUrl) ? (
+                            {((entry.imageUrl && entry.imageUrl.startsWith('data:audio/')) || /\.(mp3|wav|ogg|oga|m4a|aac)$/i.test(entry.imageUrl || '')) ? (
                                <Activity className="w-5 h-5 sm:w-6 sm:h-6 text-purple-400" />
                             ) : (
                                <img src={entry.imageUrl} alt="Receipt" className="w-full h-full object-cover" />
@@ -827,7 +832,7 @@ export default function App() {
                   <div className="absolute inset-0 bg-gradient-to-t from-black/80 via-transparent to-transparent opacity-0 group-hover:opacity-100 transition-opacity flex items-end justify-center pb-6 z-10 pointer-events-none">
                     <a href={selectedExpense.imageUrl} target="_blank" rel="noreferrer" className="px-4 py-2 bg-white/10 backdrop-blur-md rounded-full text-sm font-medium hover:bg-white/20 transition-colors text-white pointer-events-auto">View Original</a>
                   </div>
-                  {/\.(mp3|wav|ogg|oga|m4a|aac)$/i.test(selectedExpense.imageUrl) ? (
+                  {((selectedExpense.imageUrl && selectedExpense.imageUrl.startsWith('data:audio/')) || /\.(mp3|wav|ogg|oga|m4a|aac)$/i.test(selectedExpense.imageUrl || '')) ? (
                     <div className="w-full flex flex-col items-center justify-center space-y-6">
                       <div className="w-24 h-24 rounded-full bg-purple-500/10 flex items-center justify-center">
                         <Activity className="w-12 h-12 text-purple-400" />

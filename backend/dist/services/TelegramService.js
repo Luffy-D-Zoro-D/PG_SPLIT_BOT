@@ -32,6 +32,45 @@ class TelegramService {
             console.error('Failed to send Telegram message:', e?.response?.data || e.message);
         }
     }
+    static async sendMedia(chatId, mediaData, caption, type = 'photo') {
+        if (!process.env.TELEGRAM_BOT_TOKEN)
+            return;
+        try {
+            if (mediaData.startsWith('data:')) {
+                const FormData = require('form-data');
+                const form = new FormData();
+                const base64Data = mediaData.split(',')[1];
+                const buffer = Buffer.from(base64Data, 'base64');
+                const ext = type === 'photo' ? 'jpg' : 'mp3';
+                form.append('chat_id', chatId);
+                form.append(type, buffer, `media.${ext}`);
+                if (caption) {
+                    form.append('caption', caption);
+                    form.append('parse_mode', 'HTML');
+                }
+                await axios_1.default.post(`${getTelegramApiUrl()}/send${type === 'photo' ? 'Photo' : 'Audio'}`, form, {
+                    headers: form.getHeaders()
+                });
+            }
+            else {
+                await axios_1.default.post(`${getTelegramApiUrl()}/send${type === 'photo' ? 'Photo' : 'Audio'}`, {
+                    chat_id: chatId,
+                    [type]: mediaData,
+                    caption,
+                    parse_mode: 'HTML'
+                });
+            }
+        }
+        catch (e) {
+            console.error(`Failed to send Telegram ${type}:`, e?.response?.data || e.message);
+        }
+    }
+    static async sendPhoto(chatId, photoUrl, caption) {
+        await this.sendMedia(chatId, photoUrl, caption, 'photo');
+    }
+    static async sendAudio(chatId, audioUrl, caption) {
+        await this.sendMedia(chatId, audioUrl, caption, 'audio');
+    }
     /**
      * Answer a callback query to stop the loading spinner on Telegram buttons
      */

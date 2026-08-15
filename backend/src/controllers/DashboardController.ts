@@ -172,12 +172,20 @@ export class DashboardController {
       
       if (!expense) return res.status(404).json({ error: 'Expense not found' });
 
-      // Check if any confirmed settlements exist in this group AFTER the expense was created.
-      // (As a simplified safety rule, we block deletion if any settlements exist in the group to avoid complex time-travel calculations)
-      const settlementCount = await Settlement.countDocuments({ 
-        telegramChatId: expense.telegramChatId, 
-        status: 'CONFIRMED' 
-      });
+      const query: any = { 
+        status: 'CONFIRMED',
+        createdAt: { $gt: expense.createdAt }
+      };
+      if (expense.telegramChatId) {
+        query.telegramChatId = expense.telegramChatId;
+      } else if ((expense as any).whatsappChatId) {
+        query.whatsappChatId = (expense as any).whatsappChatId;
+      } else {
+        // Fallback for older expenses
+        query.telegramChatId = null;
+      }
+
+      const settlementCount = await Settlement.countDocuments(query);
 
       if (settlementCount > 0) {
         return res.status(400).json({ 
@@ -255,10 +263,10 @@ export class DashboardController {
         if (group) {
           const { WhatsAppService } = require('../services/WhatsAppService');
           const pollName = `💸 Settlement Request\n\n${debtorName} wants to settle ₹${amount} with ${creditorName}.`;
-          const pollMsg = await WhatsAppService.sendGroupPoll(group.title, pollName, ['✅ Confirm', '❌ Cancel']);
+          const pollId = await WhatsAppService.sendGroupPoll(group.title, pollName, ['✅ Confirm', '❌ Cancel']);
           
-          if (pollMsg) {
-            settlement.whatsappPollMessageId = pollMsg.id._serialized;
+          if (pollId) {
+            settlement.whatsappPollMessageId = pollId;
             await settlement.save();
           }
         }

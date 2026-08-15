@@ -55,8 +55,9 @@ const ExpenseSchema = new mongoose_1.Schema({
     sharedParticipants: { type: [ParticipantShareSchema], default: [] },
     personalExpenses: { type: [ParticipantShareSchema], default: [] },
     itemsBreakdown: { type: [String], default: [] },
-    imageUrl: { type: String },
-    whatsappPollMessageId: { type: String, required: false }
+    imageUrl: { type: String, required: false },
+    whatsappPollMessageId: { type: String, required: false },
+    addedByTelegramUserId: { type: Number, required: false }
 }, {
     timestamps: true
 });

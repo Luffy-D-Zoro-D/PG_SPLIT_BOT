@@ -226,63 +226,7 @@ export class TelegramWebhookController {
     const userMap = new Map<number, string>();
     users.forEach(u => userMap.set(u.telegramUserId, u.firstName || u.username || u.telegramUserId.toString()));
 
-    const paidByName = userMap.get(expense.paidByTelegramUserId) || 'Unknown';
-
-    let confirmText = `🧾 <b>Expense Detected</b>\n\n`;
-    if (expense.description) {
-      confirmText += `📝 <b>Description:</b> ${expense.description}\n\n`;
-    }
-    confirmText += `💰 Total: ₹${expense.totalAmount}\n`;
-    confirmText += `👤 Paid by: ${paidByName}\n\n`;
-
-    if (expense.itemsBreakdown && expense.itemsBreakdown.length > 0) {
-      confirmText += `🛒 <b>Itemized Breakdown:</b>\n`;
-      expense.itemsBreakdown.forEach(item => {
-        confirmText += `  • ${item}\n`;
-      });
-      confirmText += `\n`;
-    }
-
-    if (parseFloat(expense.sharedAmount) > 0) {
-      confirmText += `<b>Shared expense: ₹${expense.sharedAmount}</b>\n\n`;
-      expense.sharedParticipants.forEach(p => {
-        const name = userMap.get(p.telegramUserId) || 'Unknown';
-        confirmText += `* ${name}: ₹${p.share}\n`;
-      });
-      confirmText += `\n`;
-    }
-
-    if (expense.personalExpenses && expense.personalExpenses.length > 0) {
-      confirmText += `<b>Personal expense</b>\n\n`;
-      expense.personalExpenses.forEach(p => {
-        const name = userMap.get(p.telegramUserId) || 'Unknown';
-        confirmText += `* ${name}: ₹${p.share}\n`;
-      });
-      confirmText += `\n`;
-    }
-
-    let owesText = '';
-    allUserIds.forEach(userId => {
-      if (userId === expense.paidByTelegramUserId) return;
-      let totalShare = 0;
-
-      const shared = expense.sharedParticipants.find(p => p.telegramUserId === userId);
-      if (shared) totalShare += parseFloat(shared.share);
-
-      const personal = expense.personalExpenses.find(p => p.telegramUserId === userId);
-      if (personal) totalShare += parseFloat(personal.share);
-
-      if (totalShare > 0) {
-        const name = userMap.get(userId) || 'Unknown';
-        owesText += `➡️ <b>${name} owes ${paidByName} ₹${totalShare.toFixed(2).replace(/\\.00$/, '')}</b>\n`;
-      }
-    });
-
-    if (owesText) {
-      confirmText += owesText + `\n`;
-    }
-
-    confirmText += `Confirm this expense?`;
+    const confirmText = ExpenseService.formatExpenseConfirmation(expense as any, userMap, 'telegram');
 
     const replyMarkup = {
       inline_keyboard: [
@@ -386,14 +330,8 @@ export class TelegramWebhookController {
         // Send rich message to Telegram
         await TelegramService.sendMessage(chatId, msg);
 
-        // Optionally send to WhatsApp asynchronously without blocking Telegram webhook response
-        const waGroupName = process.env.WHATSAPP_GROUP_NAME || message.chat.title || 'BOTTY';
-        if (WhatsAppService.getNotificationsEnabled() || process.env.WHATSAPP_GROUP_NAME) {
-          const waMsg = msg.replace(/<b>/g, '*').replace(/<\/b>/g, '*');
-          WhatsAppService.sendGroupMessage(waGroupName, waMsg, expense.imageUrl).catch((e: any) => {
-            console.error('WhatsApp send error:', e.message || e);
-          });
-        }
+        // Broadcast to Split History
+        WhatsAppService.broadcastToSplitHistory(expense, 'expense');
       }
     } else if (data.startsWith('cancel_')) {
       const expenseId = data.split('_')[1];
@@ -512,13 +450,7 @@ export class TelegramWebhookController {
           const msg = `✅ <b>Settlement Confirmed!</b>\n\n${debtorName} has settled ₹${settlement.amount} with ${creditorName}.`;
           await TelegramService.sendMessage(chatId, msg);
 
-          const waGroupName = process.env.WHATSAPP_GROUP_NAME || 'BOTTY';
-          if (WhatsAppService.getNotificationsEnabled() || process.env.WHATSAPP_GROUP_NAME) {
-            const waMsg = `✅ *Settlement Confirmed!*\n\n${debtorName} has settled ₹${settlement.amount} with ${creditorName}.`;
-            WhatsAppService.sendGroupMessage(waGroupName, waMsg).catch((e: any) => {
-              console.error('WhatsApp send error:', e.message || e);
-            });
-          }
+          WhatsAppService.broadcastToSplitHistory(settlement, 'settlement');
 
           if (callbackQuery.message && callbackQuery.message.message_id) {
             await TelegramService.editMessageReplyMarkup(chatId, callbackQuery.message.message_id, { inline_keyboard: [] }).catch(() => {});

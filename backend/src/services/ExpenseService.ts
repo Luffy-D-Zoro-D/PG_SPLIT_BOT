@@ -115,6 +115,7 @@ export class ExpenseService {
       telegramChatId: chatId,
       totalAmount: totalAmount.toString(),
       paidByTelegramUserId: paidById,
+      addedByTelegramUserId: fromUserId,
       description: extraction.description || 'Expense',
       status: ExpenseStatus.PENDING_CONFIRMATION,
       sharedAmount: sharedAmount.toString(),
@@ -141,6 +142,80 @@ export class ExpenseService {
   static async cancelExpense(expenseId: string): Promise<IExpense | null> {
     const expense = await Expense.findOneAndDelete({ _id: expenseId });
     return expense;
+  }
+
+  static formatExpenseConfirmation(expense: IExpense, userMap: Map<number, string>, platform: 'telegram' | 'whatsapp'): string {
+    const boldStart = platform === 'telegram' ? '<b>' : '*';
+    const boldEnd = platform === 'telegram' ? '</b>' : '*';
+    
+    const paidByName = userMap.get(expense.paidByTelegramUserId) || 'Unknown';
+
+    let confirmText = `🧾 ${boldStart}Expense Detected${boldEnd}\n\n`;
+    if (expense.description) {
+      confirmText += `📝 ${boldStart}Description:${boldEnd} ${expense.description}\n\n`;
+    }
+    confirmText += `💰 Total: ₹${expense.totalAmount}\n`;
+    confirmText += `👤 Paid by: ${paidByName}\n\n`;
+
+    if (expense.itemsBreakdown && expense.itemsBreakdown.length > 0) {
+      confirmText += `🛒 ${boldStart}Itemized Breakdown:${boldEnd}\n`;
+      expense.itemsBreakdown.forEach(item => {
+        confirmText += `  • ${item}\n`;
+      });
+      confirmText += `\n`;
+    }
+
+    if (parseFloat(expense.sharedAmount) > 0) {
+      confirmText += `${boldStart}Shared expense: ₹${expense.sharedAmount}${boldEnd}\n\n`;
+      expense.sharedParticipants.forEach(p => {
+        const name = userMap.get(p.telegramUserId) || 'Unknown';
+        confirmText += `* ${name}: ₹${p.share}\n`;
+      });
+      confirmText += `\n`;
+    }
+
+    if (expense.personalExpenses && expense.personalExpenses.length > 0) {
+      confirmText += `${boldStart}Personal expense${boldEnd}\n\n`;
+      expense.personalExpenses.forEach(p => {
+        const name = userMap.get(p.telegramUserId) || 'Unknown';
+        confirmText += `* ${name}: ₹${p.share}\n`;
+      });
+      confirmText += `\n`;
+    }
+
+    let owesText = '';
+    const allUserIds = new Set<number>();
+    allUserIds.add(expense.paidByTelegramUserId);
+    expense.sharedParticipants.forEach(p => allUserIds.add(p.telegramUserId));
+    expense.personalExpenses.forEach(p => allUserIds.add(p.telegramUserId));
+
+    allUserIds.forEach(userId => {
+      if (userId === expense.paidByTelegramUserId) return;
+      let totalShare = 0;
+
+      const shared = expense.sharedParticipants.find(p => p.telegramUserId === userId);
+      if (shared) totalShare += parseFloat(shared.share);
+
+      const personal = expense.personalExpenses.find(p => p.telegramUserId === userId);
+      if (personal) totalShare += parseFloat(personal.share);
+
+      if (totalShare > 0) {
+        const name = userMap.get(userId) || 'Unknown';
+        owesText += `➡️ ${boldStart}${name} owes ${paidByName} ₹${totalShare.toFixed(2).replace(/\.00$/, '')}${boldEnd}\n`;
+      }
+    });
+
+    if (owesText) {
+      confirmText += owesText + `\n`;
+    }
+
+    if (platform === 'whatsapp') {
+      confirmText += `*Reply* to this message with "yes" to confirm or "no" to cancel.`;
+    } else {
+      confirmText += `Confirm this expense?`;
+    }
+
+    return confirmText;
   }
 
   private static findMatchingUser(name: string, memberMap: Map<string, number>): number | null {
