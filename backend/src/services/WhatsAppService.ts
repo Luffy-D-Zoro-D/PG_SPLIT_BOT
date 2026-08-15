@@ -56,6 +56,11 @@ export class WhatsAppService {
         qrcode.generate(qr, { small: true });
         this.qrCode = qr;
         console.log('DEBUG: Assigned this.qrCode =', this.qrCode ? 'valid' : 'null');
+      this.client.on('authenticated', (session) => {
+        console.log('✅ WhatsApp Authenticated! (Wait for READY...)');
+        this.qrCode = null; // Clear QR immediately so the frontend knows scanning succeeded
+        // This means the phone successfully scanned and authorized the session.
+        // If it hangs after this, it is likely an Out Of Memory (OOM) error or Puppeteer crash in Docker.
       });
 
       this.client.on('ready', () => {

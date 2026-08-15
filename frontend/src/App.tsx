@@ -78,7 +78,8 @@ export default function App() {
   useEffect(() => {
     const pollWA = async () => {
       try {
-        const res = await fetch('/api/whatsapp-status');
+        const res = await fetch('/api/debug-whatsapp');
+        if (!res.ok) return;
         const data = await res.json();
         if (data.notificationsEnabled !== undefined) {
           setWaNotificationsEnabled(data.notificationsEnabled);
@@ -87,8 +88,17 @@ export default function App() {
           setWaReady(true);
           setWaQR(null);
           setWaQRImage(null);
+          setIsAuthenticating(false);
+          return;
+        } else if (data.qrCodeValue === null) {
+          // It's authenticated but not ready yet (syncing data)
+          setWaQR(null);
+          setWaQRImage(null);
+          setIsAuthenticating(true);
           return;
         }
+        
+        setIsAuthenticating(false);
         const qrRes = await fetch('/api/whatsapp-qr');
         const qrData = await qrRes.json();
         if (qrData.qr && qrData.qr !== waQR) {
@@ -228,7 +238,7 @@ export default function App() {
     }
   };
 
-  const handleDeleteExpense = (id: string) => {
+  const handleDeleteEntry = (entry: any) => {
     setConfirmModal({
       isOpen: true,
       title: 'Delete Entry',
@@ -236,7 +246,8 @@ export default function App() {
       onConfirm: async () => {
         setConfirmModal(null);
         try {
-          const res = await fetch(`/api/expenses/${id}`, {
+          const endpoint = entry.type === 'SETTLEMENT' ? `/api/settlements/${entry._id}` : `/api/expenses/${entry._id}`;
+          const res = await fetch(endpoint, {
             method: 'DELETE'
           });
           if (!res.ok) throw new Error('Failed to delete');
@@ -517,6 +528,18 @@ export default function App() {
                     </div>
                     <p className="text-xs text-slate-400 text-center">Scan this QR code with your WhatsApp to connect the bot</p>
                   </div>
+                ) : isAuthenticating ? (
+                  <div className="flex flex-col items-center space-y-4 py-6">
+                    <div className="relative w-12 h-12 flex items-center justify-center">
+                      <div className="absolute inset-0 border-4 border-green-500/20 rounded-full"></div>
+                      <div className="absolute inset-0 border-4 border-green-500 border-t-transparent rounded-full animate-spin"></div>
+                      <MessageCircle className="w-5 h-5 text-green-500 absolute" />
+                    </div>
+                    <div className="text-center">
+                      <p className="text-sm font-semibold text-white mb-1">Authenticating...</p>
+                      <p className="text-[10px] text-slate-400">Loading your chats. This may take up to a minute depending on your server's memory.</p>
+                    </div>
+                  </div>
                 ) : (
                   <div className="flex flex-col items-center space-y-3 py-4">
                     <div className="w-10 h-10 border-2 border-green-500/30 border-t-green-500 rounded-full animate-spin" />
@@ -653,9 +676,9 @@ export default function App() {
                               : entry.status}
                           </p>
                         </div>
-                        {window.location.pathname === '/sabo/ace' && entry.type === 'EXPENSE' && (
+                        {window.location.pathname === '/sabo/ace' && (entry.type === 'EXPENSE' || entry.type === 'SETTLEMENT') && (
                           <button 
-                            onClick={(e) => { e.stopPropagation(); handleDeleteExpense(entry._id); }}
+                            onClick={(e) => { e.stopPropagation(); handleDeleteEntry(entry); }}
                             className="opacity-0 group-hover:opacity-100 p-2 text-rose-400 hover:bg-rose-500/10 rounded-xl transition-all"
                           >
                             Delete

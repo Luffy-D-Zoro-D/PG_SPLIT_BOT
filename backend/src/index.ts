@@ -26,6 +26,7 @@ app.get('/api/stats', DashboardController.getStats);
 app.get('/api/expenses', DashboardController.getExpenses);
 app.get('/api/balances', DashboardController.getBalances);
 app.delete('/api/expenses/:id', DashboardController.deleteExpense);
+app.delete('/api/settlements/:id', DashboardController.deleteSettlement);
 app.put('/api/expenses/:id', DashboardController.updateExpense);
 app.post('/api/settle', DashboardController.settleBalance);
 

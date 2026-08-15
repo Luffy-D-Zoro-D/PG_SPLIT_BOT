@@ -194,6 +194,22 @@ export class DashboardController {
     }
   }
 
+  static async deleteSettlement(req: Request, res: Response) {
+    try {
+      const { id } = req.params;
+      const settlement = await Settlement.findById(id);
+      
+      if (!settlement) return res.status(404).json({ error: 'Settlement not found' });
+
+      // Hard delete settlement from MongoDB
+      await Settlement.deleteOne({ _id: id });
+      
+      res.json({ success: true });
+    } catch (e) {
+      res.status(500).json({ error: 'Failed to delete settlement' });
+    }
+  }
+
   static async settleBalance(req: Request, res: Response) {
     try {
       const { debtorId, creditorId, amount, groupId } = req.body;
