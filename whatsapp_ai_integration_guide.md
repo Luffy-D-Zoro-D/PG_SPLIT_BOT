@@ -794,3 +794,57 @@ rm -rf whatsapp-auth/
                 │  WhatsApp Group │
                 └─────────────────┘
 ```
+
+---
+
+## 29. ExpenseBot Advanced AI Configuration
+
+This project implements an advanced AI routing configuration to maximize speed and reduce costs by connecting to Groq instead of standard OpenAI servers.
+
+### What We Use
+* **Provider API:** Groq (accessed via the standard `openai` npm package, pointing the `baseURL` to `https://api.groq.com/openai/v1`).
+* **Text Model (`AI_TEXT_MODEL`):** `llama-3.3-70b-versatile` (Meta's Llama 3.3). Used for natural language chat, identifying intent, and extracting JSON data.
+* **Audio Model (`AI_AUDIO_MODEL`):** `whisper-large-v3` (OpenAI's Whisper). Used to transcribe voice notes into text before passing them to the text model.
+
+### How We Use It (The Code)
+
+In `src/services/AIService.ts`, the OpenAI client is configured as follows:
+
+```typescript
+import OpenAI from 'openai';
+import fs from 'fs';
+
+export class AIService {
+    private openai: OpenAI;
+
+    constructor() {
+        // Point the baseURL to Groq's servers using the OpenAI SDK
+        this.openai = new OpenAI({ 
+            apiKey: process.env.GROQ_API_KEY,
+            baseURL: 'https://api.groq.com/openai/v1'
+        });
+    }
+
+    // 1. TEXT GENERATION (Using Llama 3.3)
+    async generateResponse(text: string): Promise<string> {
+        const response = await this.openai.chat.completions.create({
+            model: process.env.AI_TEXT_MODEL || 'llama-3.3-70b-versatile',
+            messages: [
+                { role: 'system', content: 'You are an expense bot assistant.' },
+                { role: 'user', content: text }
+            ]
+        });
+        return response.choices[0].message.content || '';
+    }
+
+    // 2. AUDIO TRANSCRIPTION (Using Whisper v3)
+    async transcribeAudio(audioFilePath: string): Promise<string> {
+        const transcription = await this.openai.audio.transcriptions.create({
+            file: fs.createReadStream(audioFilePath),
+            model: process.env.AI_AUDIO_MODEL || 'whisper-large-v3',
+            response_format: 'text'
+        });
+        return transcription as unknown as string;
+    }
+}
+```
