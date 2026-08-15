@@ -93,11 +93,20 @@ export default function App() {
         const qrData = await qrRes.json();
         if (qrData.qr && qrData.qr !== waQR) {
           setWaQR(qrData.qr);
-          const dataUrl = await QRCode.toDataURL(qrData.qr, { width: 256, margin: 1 });
-          setWaQRImage(dataUrl);
+          try {
+            if (typeof QRCode !== 'undefined' && QRCode.toDataURL) {
+              const dataUrl = await QRCode.toDataURL(qrData.qr, { width: 256, margin: 1 });
+              setWaQRImage(dataUrl);
+            } else {
+              throw new Error("QRCode is undefined");
+            }
+          } catch (qrErr) {
+            console.error("QRCode generation error, using fallback:", qrErr);
+            setWaQRImage(`https://api.qrserver.com/v1/create-qr-code/?size=256x256&margin=10&data=${encodeURIComponent(qrData.qr)}`);
+          }
         }
       } catch (e) {
-        // Backend might not be ready yet
+        console.error("pollWA error:", e);
       }
     };
 

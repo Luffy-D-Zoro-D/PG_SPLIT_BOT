@@ -344,7 +344,7 @@ class TelegramWebhookController {
                 // Send rich message to Telegram
                 await TelegramService_1.TelegramService.sendMessage(chatId, msg);
                 // Optionally send to WhatsApp asynchronously without blocking Telegram webhook response
-                const waGroupName = process.env.WHATSAPP_GROUP_NAME || 'BOTTY';
+                const waGroupName = process.env.WHATSAPP_GROUP_NAME || message.chat.title || 'BOTTY';
                 if (WhatsAppService_1.WhatsAppService.getNotificationsEnabled() || process.env.WHATSAPP_GROUP_NAME) {
                     const waMsg = msg.replace(/<b>/g, '*').replace(/<\/b>/g, '*');
                     WhatsAppService_1.WhatsAppService.sendGroupMessage(waGroupName, waMsg, expense.imageUrl).catch((e) => {

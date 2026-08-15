@@ -2,6 +2,7 @@ import { Client, LocalAuth, MessageMedia } from 'whatsapp-web.js';
 import qrcode from 'qrcode-terminal';
 import dotenv from 'dotenv';
 import fs from 'fs';
+import path from 'path';
 import { Setting } from '../models/Setting';
 
 dotenv.config();
@@ -44,10 +45,6 @@ export class WhatsAppService {
           ],
           executablePath: process.env.PUPPETEER_EXECUTABLE_PATH || undefined,
           protocolTimeout: 60000, // 60s timeout
-        },
-        webVersionCache: {
-          type: 'remote',
-          remotePath: 'https://raw.githubusercontent.com/wppconnect-team/wa-version/main/html/2.3000.1045270340-alpha.html'
         }
       });
 
@@ -58,6 +55,7 @@ export class WhatsAppService {
         console.log('==========================================');
         qrcode.generate(qr, { small: true });
         this.qrCode = qr;
+        console.log('DEBUG: Assigned this.qrCode =', this.qrCode ? 'valid' : 'null');
       });
 
       this.client.on('ready', () => {
@@ -144,13 +142,22 @@ export class WhatsAppService {
 
     // Build MessageMedia if imageUrl is provided
     let media: MessageMedia | undefined = undefined;
-    if (imageUrl && imageUrl.startsWith('data:')) {
+    if (imageUrl) {
       try {
-        const parts = imageUrl.split(';base64,');
-        if (parts.length === 2) {
-          const mimeType = parts[0].replace('data:', '');
-          const base64Data = parts[1];
-          media = new MessageMedia(mimeType, base64Data, `receipt_${Date.now()}.jpg`);
+        if (imageUrl.startsWith('data:')) {
+          const parts = imageUrl.split(';base64,');
+          if (parts.length === 2) {
+            const mimeType = parts[0].replace('data:', '');
+            const base64Data = parts[1];
+            media = new MessageMedia(mimeType, base64Data, `receipt_${Date.now()}.jpg`);
+          }
+        } else if (imageUrl.startsWith('/uploads/')) {
+          const localPath = path.join(process.cwd(), imageUrl);
+          if (fs.existsSync(localPath)) {
+            media = MessageMedia.fromFilePath(localPath);
+          } else {
+            console.warn(`⚠️ WhatsApp image not found on disk: ${localPath}`);
+          }
         }
       } catch (mediaErr: any) {
         console.warn('⚠️ Failed to construct MessageMedia for WhatsApp:', mediaErr.message);
@@ -166,11 +173,10 @@ export class WhatsAppService {
         console.log(`🚀 [WhatsApp] Dispatching message to JID: ${targetJid}`);
         
         const sendPromise = (async () => {
-          const chat = await this.client!.getChatById(targetJid);
           if (media) {
-            return await chat.sendMessage(media, { caption: text });
+            return await this.client!.sendMessage(targetJid, media, { caption: text });
           } else {
-            return await chat.sendMessage(text);
+            return await this.client!.sendMessage(targetJid, text);
           }
         })();
 
@@ -198,12 +204,24 @@ export class WhatsAppService {
       let chats: any[] = [];
       try {
         chats = await this.client.pupPage.evaluate(() => {
-          const chatCollection = (window as any).require('WAWebCollections').Chat;
-          return chatCollection.getModelsArray().map((c: any) => ({
-            id: c.id._serialized,
-            name: c.name || c.formattedTitle || '',
-            isGroup: c.id._serialized.endsWith('@g.us')
-          }));
+          try {
+            const req = (window as any).require;
+            if (!req) return [];
+            const chatCollection = req('WAWebCollections').Chat;
+            const models = chatCollection?.getModelsArray ? chatCollection.getModelsArray() : [];
+            return models
+              .filter((c: any) => {
+                const id = c.id?._serialized || (typeof c.id === 'string' ? c.id : '');
+                return String(id).endsWith('@g.us');
+              })
+              .map((c: any) => ({
+                id: String(c.id?._serialized || c.id || ''),
+                name: String(c.name || c.formattedTitle || ''),
+                isGroup: true
+              }));
+          } catch (e) {
+            return [];
+          }
         });
       } catch (evalError: any) {
         console.warn('⚠️ WhatsApp pupPage evaluate failed (detached frame?), falling back to getChats():', evalError.message);
@@ -238,11 +256,10 @@ export class WhatsAppService {
       console.log(`🚀 [WhatsApp] Dispatching message to JID (fallback): ${targetGroup.id}`);
       
       const sendPromise = (async () => {
-        const chat = await this.client!.getChatById(targetGroup.id);
         if (media) {
-          return await chat.sendMessage(media, { caption: text });
+          return await this.client!.sendMessage(targetGroup.id, media, { caption: text });
         } else {
-          return await chat.sendMessage(text);
+          return await this.client!.sendMessage(targetGroup.id, text);
         }
       })();
 

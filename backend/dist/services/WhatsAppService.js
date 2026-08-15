@@ -179,12 +179,26 @@ class WhatsAppService {
             let chats = [];
             try {
                 chats = await this.client.pupPage.evaluate(() => {
-                    const chatCollection = window.require('WAWebCollections').Chat;
-                    return chatCollection.getModelsArray().map((c) => ({
-                        id: c.id._serialized,
-                        name: c.name || c.formattedTitle || '',
-                        isGroup: c.id._serialized.endsWith('@g.us')
-                    }));
+                    try {
+                        const req = window.require;
+                        if (!req)
+                            return [];
+                        const chatCollection = req('WAWebCollections').Chat;
+                        const models = chatCollection?.getModelsArray ? chatCollection.getModelsArray() : [];
+                        return models
+                            .filter((c) => {
+                            const id = c.id?._serialized || (typeof c.id === 'string' ? c.id : '');
+                            return String(id).endsWith('@g.us');
+                        })
+                            .map((c) => ({
+                            id: String(c.id?._serialized || c.id || ''),
+                            name: String(c.name || c.formattedTitle || ''),
+                            isGroup: true
+                        }));
+                    }
+                    catch (e) {
+                        return [];
+                    }
                 });
             }
             catch (evalError) {

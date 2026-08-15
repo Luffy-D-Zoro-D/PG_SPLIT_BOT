@@ -42,6 +42,14 @@ app.get('/api/whatsapp-qr', (req, res) => {
   res.send({ qr });
 });
 
+app.get('/api/debug-whatsapp', (req, res) => {
+  res.send({
+    qrCodeValue: WhatsAppService.getQRCode(),
+    isReady: WhatsAppService.getIsReady(),
+    hasClient: !!(WhatsAppService as any).client
+  });
+});
+
 app.get('/api/whatsapp-status', (req, res) => {
   const isReady = WhatsAppService.getIsReady();
   const needsAuth = !isReady && !!WhatsAppService.getQRCode();
