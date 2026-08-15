@@ -59,13 +59,21 @@ export class WhatsAppService {
             }
             if (connection === 'close') {
                 const shouldReconnect = lastDisconnect?.error?.output?.statusCode !== DisconnectReason.loggedOut;
-                console.log('WhatsApp connection closed due to ', lastDisconnect?.error, ', reconnecting ', shouldReconnect);
+                const errorMsg = lastDisconnect?.error?.message || lastDisconnect?.error?.toString() || 'Unknown Error';
+                
                 this.isReady = false;
+                
+                if (errorMsg.includes('QR refs attempts ended')) {
+                    console.log('⏳ QR Code expired. Regenerating...');
+                } else {
+                    console.log('⚠️ WhatsApp connection closed due to:', errorMsg, '| Reconnecting:', shouldReconnect);
+                }
+
                 if (shouldReconnect) {
                     setTimeout(() => this.initialize(), 3000);
                 }
                 else {
-                    console.log('You are logged out. Please delete the session folder and restart.');
+                    console.log('🚪 You are logged out. Please delete the session folder and restart.');
                     try {
                         fs.rmSync(WHATSAPP_AUTH_PATH, { recursive: true, force: true });
                     }
