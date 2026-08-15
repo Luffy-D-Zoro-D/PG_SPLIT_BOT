@@ -17,6 +17,7 @@ class WhatsAppService {
     static qrCode = null;
     static cachedGroupJidMap = new Map();
     static chatHistories = new Map();
+    static activePolls = new Map();
     static downloadMediaMessage = null;
     static downloadContentFromMessage = null;
     static async initialize() {
@@ -151,6 +152,36 @@ class WhatsAppService {
                         console.error('Error downloading/transcribing WhatsApp audio:', err);
                         await this.sock.sendMessage(groupJid, { text: '❌ Failed to understand the audio.' });
                         continue;
+                    }
+                }
+                if (msg.message?.pollUpdateMessage) {
+                    const pollCreationKey = msg.message.pollUpdateMessage.pollCreationMessageKey;
+                    const pollId = pollCreationKey.id;
+                    const originalPollMsg = WhatsAppService.activePolls.get(pollId);
+                    if (originalPollMsg) {
+                        const { getAggregateVotesInPollMessage } = require('@whiskeysockets/baileys');
+                        const aggregatedVotes = getAggregateVotesInPollMessage({
+                            message: originalPollMsg,
+                            pollUpdates: [msg]
+                        });
+                        const yesVotes = aggregatedVotes.find((v) => v.name.includes('Yes'))?.voters || [];
+                        const noVotes = aggregatedVotes.find((v) => v.name.includes('No'))?.voters || [];
+                        const cleanSender = senderJid.split('@')[0];
+                        const voterJid = msg.key.participant || senderJid;
+                        if (yesVotes.includes(voterJid) || yesVotes.some((v) => v.includes(cleanSender))) {
+                            text = 'yes';
+                        }
+                        else if (noVotes.includes(voterJid) || noVotes.some((v) => v.includes(cleanSender))) {
+                            text = 'no';
+                        }
+                        if (text) {
+                            if (!msg.message.extendedTextMessage) {
+                                msg.message.extendedTextMessage = { contextInfo: { stanzaId: pollId } };
+                            }
+                            else {
+                                msg.message.extendedTextMessage.contextInfo = { stanzaId: pollId };
+                            }
+                        }
                     }
                 }
                 if (!text)
@@ -378,10 +409,21 @@ class WhatsAppService {
                 const users = await LocalUser.find({ telegramUserId: { $in: Array.from(allUserIds) } });
                 const userMap = new Map();
                 users.forEach((u) => userMap.set(u.telegramUserId, u.firstName || u.username || u.telegramUserId.toString()));
-                const confirmText = LocalExpenseService.formatExpenseConfirmation(result, userMap, 'whatsapp');
+                let confirmText = LocalExpenseService.formatExpenseConfirmation(result, userMap, 'whatsapp');
+                confirmText = confirmText.replace(/Reply to this message with "yes" to confirm or "no" to cancel\./gi, '').trim();
                 const confirmMsg = await this.sock.sendMessage(groupJid, { text: confirmText });
+                const pollMsg = await this.sock.sendMessage(groupJid, {
+                    poll: {
+                        name: 'Approve this expense?',
+                        values: ['✅ Yes', '❌ No'],
+                        selectableCount: 1
+                    }
+                }, { quoted: confirmMsg });
                 const Expense = require('../models/Expense').default;
-                await Expense.updateOne({ _id: result._id }, { whatsappPollMessageId: confirmMsg?.key?.id });
+                await Expense.updateOne({ _id: result._id }, { whatsappPollMessageId: pollMsg?.key?.id });
+                if (pollMsg && pollMsg.key && pollMsg.key.id) {
+                    WhatsAppService.activePolls.set(pollMsg.key.id, pollMsg.message);
+                }
             }
         });
         this.sock.ev.on('messages.update', async (events) => {
