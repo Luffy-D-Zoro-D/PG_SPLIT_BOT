@@ -9,7 +9,7 @@ dotenv.config();
 
 // Railway mounts a persistent volume at this path so the WhatsApp session
 // survives across deployments/restarts, avoiding a re-scan of the QR code.
-const WHATSAPP_AUTH_PATH = process.env.WHATSAPP_AUTH_PATH || '/app/whatsapp-auth';
+const WHATSAPP_AUTH_PATH = process.env.WHATSAPP_AUTH_PATH || path.join(process.cwd(), 'whatsapp-auth');
 
 export class WhatsAppService {
   private static client: Client | null = null;
@@ -18,6 +18,7 @@ export class WhatsAppService {
 
   static initialize() {
     console.log('Initializing WhatsApp Client...');
+    
     
     try {
       // Make sure the persistent volume directory exists before LocalAuth tries to use it.
@@ -56,7 +57,9 @@ export class WhatsAppService {
         qrcode.generate(qr, { small: true });
         this.qrCode = qr;
         console.log('DEBUG: Assigned this.qrCode =', this.qrCode ? 'valid' : 'null');
-      this.client.on('authenticated', (session) => {
+      });
+
+      this.client.on('authenticated', (session: any) => {
         console.log('✅ WhatsApp Authenticated! (Wait for READY...)');
         this.qrCode = null; // Clear QR immediately so the frontend knows scanning succeeded
         // This means the phone successfully scanned and authorized the session.

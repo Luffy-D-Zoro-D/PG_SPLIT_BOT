@@ -26,7 +26,7 @@ export default function App() {
   const [confirmModal, setConfirmModal] = useState<{ isOpen: boolean, title: string, message: string, onConfirm: () => void } | null>(null);
 
   // Admin state & edits
-  const isAdmin = window.location.pathname === '/sabo/ace';
+  const isAdmin = window.location.pathname.includes('/sabo/ace');
   const [editImageFile, setEditImageFile] = useState<File | null>(null);
   const [editDateValue, setEditDateValue] = useState<string>('');
 
@@ -35,6 +35,7 @@ export default function App() {
   const [waReady, setWaReady] = useState(false);
   const [waNotificationsEnabled, setWaNotificationsEnabled] = useState(false);
   const [waQRImage, setWaQRImage] = useState<string | null>(null);
+  const [isAuthenticating, setIsAuthenticating] = useState(false);
   const [showWaPanel, setShowWaPanel] = useState(false);
 
   const fetchData = async () => {
@@ -676,10 +677,10 @@ export default function App() {
                               : entry.status}
                           </p>
                         </div>
-                        {window.location.pathname === '/sabo/ace' && (entry.type === 'EXPENSE' || entry.type === 'SETTLEMENT') && (
+                        {isAdmin && (entry.type === 'EXPENSE' || entry.type === 'SETTLEMENT') && (
                           <button 
                             onClick={(e) => { e.stopPropagation(); handleDeleteEntry(entry); }}
-                            className="opacity-0 group-hover:opacity-100 p-2 text-rose-400 hover:bg-rose-500/10 rounded-xl transition-all"
+                            className="p-1.5 sm:p-2 text-rose-500/50 hover:text-rose-400 hover:bg-rose-500/10 rounded-lg sm:rounded-xl transition-all text-xs sm:text-sm font-medium"
                           >
                             Delete
                           </button>

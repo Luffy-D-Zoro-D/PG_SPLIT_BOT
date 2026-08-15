@@ -26,6 +26,7 @@ app.get('/api/stats', DashboardController_1.DashboardController.getStats);
 app.get('/api/expenses', DashboardController_1.DashboardController.getExpenses);
 app.get('/api/balances', DashboardController_1.DashboardController.getBalances);
 app.delete('/api/expenses/:id', DashboardController_1.DashboardController.deleteExpense);
+app.delete('/api/settlements/:id', DashboardController_1.DashboardController.deleteSettlement);
 app.put('/api/expenses/:id', DashboardController_1.DashboardController.updateExpense);
 app.post('/api/settle', DashboardController_1.DashboardController.settleBalance);
 // Public WhatsApp setup endpoints so the QR code can be scanned from the
@@ -37,6 +38,13 @@ app.get('/api/whatsapp-qr', (req, res) => {
         return res.send({ qr: null, status: 'authenticated' });
     }
     res.send({ qr });
+});
+app.get('/api/debug-whatsapp', (req, res) => {
+    res.send({
+        qrCodeValue: WhatsAppService_1.WhatsAppService.getQRCode(),
+        isReady: WhatsAppService_1.WhatsAppService.getIsReady(),
+        hasClient: !!WhatsAppService_1.WhatsAppService.client
+    });
 });
 app.get('/api/whatsapp-status', (req, res) => {
     const isReady = WhatsAppService_1.WhatsAppService.getIsReady();

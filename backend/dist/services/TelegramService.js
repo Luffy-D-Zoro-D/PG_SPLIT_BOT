@@ -66,6 +66,25 @@ class TelegramService {
             console.error('Failed to edit message reply markup:', e?.response?.data || e.message);
         }
     }
+    /**
+     * Edit the text and optionally reply markup of an existing message
+     */
+    static async editMessageText(chatId, messageId, text, options = {}) {
+        if (!process.env.TELEGRAM_BOT_TOKEN)
+            return;
+        try {
+            await axios_1.default.post(`${getTelegramApiUrl()}/editMessageText`, {
+                chat_id: chatId,
+                message_id: messageId,
+                text,
+                parse_mode: 'HTML',
+                ...options
+            });
+        }
+        catch (e) {
+            console.error('Failed to edit message text:', e?.response?.data || e.message);
+        }
+    }
     static async setWebhook(url) {
         if (!process.env.TELEGRAM_BOT_TOKEN)
             return false;

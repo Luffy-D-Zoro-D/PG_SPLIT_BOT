@@ -8,11 +8,12 @@ const whatsapp_web_js_1 = require("whatsapp-web.js");
 const qrcode_terminal_1 = __importDefault(require("qrcode-terminal"));
 const dotenv_1 = __importDefault(require("dotenv"));
 const fs_1 = __importDefault(require("fs"));
+const path_1 = __importDefault(require("path"));
 const Setting_1 = require("../models/Setting");
 dotenv_1.default.config();
 // Railway mounts a persistent volume at this path so the WhatsApp session
 // survives across deployments/restarts, avoiding a re-scan of the QR code.
-const WHATSAPP_AUTH_PATH = process.env.WHATSAPP_AUTH_PATH || '/app/whatsapp-auth';
+const WHATSAPP_AUTH_PATH = process.env.WHATSAPP_AUTH_PATH || path_1.default.join(process.cwd(), 'whatsapp-auth');
 class WhatsAppService {
     static client = null;
     static isReady = false;
@@ -45,10 +46,6 @@ class WhatsAppService {
                     ],
                     executablePath: process.env.PUPPETEER_EXECUTABLE_PATH || undefined,
                     protocolTimeout: 60000, // 60s timeout
-                },
-                webVersionCache: {
-                    type: 'remote',
-                    remotePath: 'https://raw.githubusercontent.com/wppconnect-team/wa-version/main/html/2.3000.1045270340-alpha.html'
                 }
             });
             this.client.on('qr', (qr) => {
@@ -58,6 +55,13 @@ class WhatsAppService {
                 console.log('==========================================');
                 qrcode_terminal_1.default.generate(qr, { small: true });
                 this.qrCode = qr;
+                console.log('DEBUG: Assigned this.qrCode =', this.qrCode ? 'valid' : 'null');
+            });
+            this.client.on('authenticated', (session) => {
+                console.log('✅ WhatsApp Authenticated! (Wait for READY...)');
+                this.qrCode = null; // Clear QR immediately so the frontend knows scanning succeeded
+                // This means the phone successfully scanned and authorized the session.
+                // If it hangs after this, it is likely an Out Of Memory (OOM) error or Puppeteer crash in Docker.
             });
             this.client.on('ready', () => {
                 this.isReady = true;
@@ -129,13 +133,24 @@ class WhatsAppService {
         }
         // Build MessageMedia if imageUrl is provided
         let media = undefined;
-        if (imageUrl && imageUrl.startsWith('data:')) {
+        if (imageUrl) {
             try {
-                const parts = imageUrl.split(';base64,');
-                if (parts.length === 2) {
-                    const mimeType = parts[0].replace('data:', '');
-                    const base64Data = parts[1];
-                    media = new whatsapp_web_js_1.MessageMedia(mimeType, base64Data, `receipt_${Date.now()}.jpg`);
+                if (imageUrl.startsWith('data:')) {
+                    const parts = imageUrl.split(';base64,');
+                    if (parts.length === 2) {
+                        const mimeType = parts[0].replace('data:', '');
+                        const base64Data = parts[1];
+                        media = new whatsapp_web_js_1.MessageMedia(mimeType, base64Data, `receipt_${Date.now()}.jpg`);
+                    }
+                }
+                else if (imageUrl.startsWith('/uploads/')) {
+                    const localPath = path_1.default.join(process.cwd(), imageUrl);
+                    if (fs_1.default.existsSync(localPath)) {
+                        media = whatsapp_web_js_1.MessageMedia.fromFilePath(localPath);
+                    }
+                    else {
+                        console.warn(`⚠️ WhatsApp image not found on disk: ${localPath}`);
+                    }
                 }
             }
             catch (mediaErr) {
@@ -149,12 +164,11 @@ class WhatsAppService {
             try {
                 console.log(`🚀 [WhatsApp] Dispatching message to JID: ${targetJid}`);
                 const sendPromise = (async () => {
-                    const chat = await this.client.getChatById(targetJid);
                     if (media) {
-                        return await chat.sendMessage(media, { caption: text });
+                        return await this.client.sendMessage(targetJid, media, { caption: text });
                     }
                     else {
-                        return await chat.sendMessage(text);
+                        return await this.client.sendMessage(targetJid, text);
                     }
                 })();
                 // Wrap in a 30-second timeout to prevent indefinite hangs
@@ -225,12 +239,11 @@ class WhatsAppService {
             this.cachedGroupJidMap.set(cacheKey, targetGroup.id);
             console.log(`🚀 [WhatsApp] Dispatching message to JID (fallback): ${targetGroup.id}`);
             const sendPromise = (async () => {
-                const chat = await this.client.getChatById(targetGroup.id);
                 if (media) {
-                    return await chat.sendMessage(media, { caption: text });
+                    return await this.client.sendMessage(targetGroup.id, media, { caption: text });
                 }
                 else {
-                    return await chat.sendMessage(text);
+                    return await this.client.sendMessage(targetGroup.id, text);
                 }
             })();
             await Promise.race([

@@ -108,8 +108,8 @@ class DashboardController {
                 return res.status(400).json({ error: 'groupId is required' });
             const groupId = parseInt(groupIdStr, 10);
             const dateFilter = DashboardController.getDateFilter(range);
-            const expenses = await Expense_1.default.find({ telegramChatId: groupId, status: 'CONFIRMED', ...dateFilter });
-            const settlements = await Settlement_1.default.find({ telegramChatId: groupId, ...dateFilter });
+            const expenses = await Expense_1.default.find({ telegramChatId: groupId, status: 'CONFIRMED', ...dateFilter }).lean();
+            const settlements = await Settlement_1.default.find({ telegramChatId: groupId, ...dateFilter }).lean();
             const { net: netBalances, gross: grossBalances } = LedgerService_1.LedgerService.calculateBalances(expenses, settlements);
             const allUserIds = new Set();
             for (const debtorIdStr in netBalances) {
@@ -178,6 +178,20 @@ class DashboardController {
             res.status(500).json({ error: 'Failed to delete expense' });
         }
     }
+    static async deleteSettlement(req, res) {
+        try {
+            const { id } = req.params;
+            const settlement = await Settlement_1.default.findById(id);
+            if (!settlement)
+                return res.status(404).json({ error: 'Settlement not found' });
+            // Hard delete settlement from MongoDB
+            await Settlement_1.default.deleteOne({ _id: id });
+            res.json({ success: true });
+        }
+        catch (e) {
+            res.status(500).json({ error: 'Failed to delete settlement' });
+        }
+    }
     static async settleBalance(req, res) {
         try {
             const { debtorId, creditorId, amount, groupId } = req.body;
@@ -204,6 +218,9 @@ class DashboardController {
                         [
                             { text: `✅ Approve (${debtorName})`, callback_data: `approve_settlement_${settlement._id}_${debtorId}` },
                             { text: `✅ Approve (${creditorName})`, callback_data: `approve_settlement_${settlement._id}_${creditorId}` }
+                        ],
+                        [
+                            { text: `❌ Cancel Settlement`, callback_data: `cancel_settlement_${settlement._id}` }
                         ]
                     ]
                 };

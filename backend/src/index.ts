@@ -47,7 +47,8 @@ app.get('/api/debug-whatsapp', (req, res) => {
   res.send({
     qrCodeValue: WhatsAppService.getQRCode(),
     isReady: WhatsAppService.getIsReady(),
-    hasClient: !!(WhatsAppService as any).client
+    hasClient: !!(WhatsAppService as any).client,
+    notificationsEnabled: WhatsAppService.getNotificationsEnabled()
   });
 });
 

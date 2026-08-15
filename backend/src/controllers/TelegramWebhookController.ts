@@ -405,6 +405,38 @@ export class TelegramWebhookController {
       }
 
       await TelegramService.sendMessage(chatId, `❌ Expense cancelled.`);
+    } else if (data.startsWith('cancel_settlement_')) {
+      const settlementId = data.split('_')[2];
+      
+      const settlement = await Settlement.findById(settlementId);
+      if (!settlement) {
+        await axios.post(`https://api.telegram.org/bot${process.env.TELEGRAM_BOT_TOKEN}/answerCallbackQuery`, {
+          callback_query_id: callbackQuery.id,
+          text: "❌ Settlement request not found.",
+          show_alert: false
+        }).catch((e: any) => console.error(e));
+        return;
+      }
+
+      // Hard delete from DB
+      await Settlement.deleteOne({ _id: settlementId });
+
+      // Answer callback
+      await axios.post(`https://api.telegram.org/bot${process.env.TELEGRAM_BOT_TOKEN}/answerCallbackQuery`, {
+        callback_query_id: callbackQuery.id,
+        text: "✅ Settlement cancelled.",
+        show_alert: false
+      }).catch((e: any) => console.error(e));
+
+      // Update message
+      if (message && message.message_id) {
+        await TelegramService.editMessageText(
+          chatId,
+          message.message_id,
+          `❌ <b>Settlement Cancelled</b>\n\nThe settlement request for ₹${settlement.amount} was cancelled.`,
+          { inline_keyboard: [] }
+        );
+      }
     } else if (data.startsWith('approve_settlement_')) {
       const parts = data.split('_');
       const settlementId = parts[2];

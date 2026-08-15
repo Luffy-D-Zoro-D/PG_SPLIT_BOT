@@ -241,6 +241,9 @@ export class DashboardController {
             [
               { text: `✅ Approve (${debtorName})`, callback_data: `approve_settlement_${settlement._id}_${debtorId}` },
               { text: `✅ Approve (${creditorName})`, callback_data: `approve_settlement_${settlement._id}_${creditorId}` }
+            ],
+            [
+              { text: `❌ Cancel Settlement`, callback_data: `cancel_settlement_${settlement._id}` }
             ]
           ]
         };

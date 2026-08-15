@@ -362,6 +362,30 @@ class TelegramWebhookController {
             }
             await TelegramService_1.TelegramService.sendMessage(chatId, `❌ Expense cancelled.`);
         }
+        else if (data.startsWith('cancel_settlement_')) {
+            const settlementId = data.split('_')[2];
+            const settlement = await Settlement_1.default.findById(settlementId);
+            if (!settlement) {
+                await axios_1.default.post(`https://api.telegram.org/bot${process.env.TELEGRAM_BOT_TOKEN}/answerCallbackQuery`, {
+                    callback_query_id: callbackQuery.id,
+                    text: "❌ Settlement request not found.",
+                    show_alert: false
+                }).catch((e) => console.error(e));
+                return;
+            }
+            // Hard delete from DB
+            await Settlement_1.default.deleteOne({ _id: settlementId });
+            // Answer callback
+            await axios_1.default.post(`https://api.telegram.org/bot${process.env.TELEGRAM_BOT_TOKEN}/answerCallbackQuery`, {
+                callback_query_id: callbackQuery.id,
+                text: "✅ Settlement cancelled.",
+                show_alert: false
+            }).catch((e) => console.error(e));
+            // Update message
+            if (message && message.message_id) {
+                await TelegramService_1.TelegramService.editMessageText(chatId, message.message_id, `❌ <b>Settlement Cancelled</b>\n\nThe settlement request for ₹${settlement.amount} was cancelled.`, { inline_keyboard: [] });
+            }
+        }
         else if (data.startsWith('approve_settlement_')) {
             const parts = data.split('_');
             const settlementId = parts[2];
@@ -375,9 +399,17 @@ class TelegramWebhookController {
                 }).catch((e) => console.error(e));
                 return;
             }
-            // Atomically add the user to approvedBy using $addToSet
-            const settlement = await Settlement_1.default.findOneAndUpdate({ _id: settlementId, status: 'PENDING_APPROVAL' }, { $addToSet: { approvedBy: targetUserId } }, { returnDocument: 'after' });
-            if (!settlement) {
+            // Acknowledge the callback immediately to remove loading state
+            await axios_1.default.post(`https://api.telegram.org/bot${process.env.TELEGRAM_BOT_TOKEN}/answerCallbackQuery`, {
+                callback_query_id: callbackQuery.id,
+                text: "✅ Vote recorded.",
+                show_alert: false
+            }).catch((e) => console.error(e));
+            // Atomically add the user to approvedBy using $addToSet. 
+            // We use returnDocument: 'before' so we can check if the user was ALREADY in the array.
+            // This mathematically guarantees we only process their vote once, even if they mash the button or Telegram retries concurrently.
+            const beforeSettlement = await Settlement_1.default.findOneAndUpdate({ _id: settlementId, status: 'PENDING_APPROVAL' }, { $addToSet: { approvedBy: targetUserId } }); // mongoose default is return original document (before)
+            if (!beforeSettlement) {
                 // Either it doesn't exist or it's already CONFIRMED
                 const checkSettlement = await Settlement_1.default.findById(settlementId);
                 if (checkSettlement?.status === 'CONFIRMED') {
@@ -393,6 +425,14 @@ class TelegramWebhookController {
                     return;
                 }
             }
+            // If the user was ALREADY in the array before this atomic update, it's a duplicate/race condition!
+            if (beforeSettlement.approvedBy.includes(targetUserId)) {
+                return;
+            }
+            // We need the AFTER state for the rest of the logic
+            const settlement = await Settlement_1.default.findById(settlementId);
+            if (!settlement)
+                return;
             const debtorId = settlement.paidByTelegramUserId;
             const creditorId = settlement.paidToTelegramUserId;
             const debtorApproved = settlement.approvedBy.includes(debtorId);
@@ -411,13 +451,30 @@ class TelegramWebhookController {
                             console.error('WhatsApp send error:', e.message || e);
                         });
                     }
+                    if (callbackQuery.message && callbackQuery.message.message_id) {
+                        await TelegramService_1.TelegramService.editMessageReplyMarkup(chatId, callbackQuery.message.message_id, { inline_keyboard: [] }).catch(() => { });
+                    }
                 }
             }
             else {
                 const approvedName = callbackQuery.from.first_name;
                 const waitingForId = debtorApproved ? creditorId : debtorId;
                 const waitingForName = debtorApproved ? creditorName : debtorName;
-                await TelegramService_1.TelegramService.sendMessage(chatId, `⏳ ${approvedName} approved the settlement.\n<i>Waiting for ${waitingForName} to approve...</i>`);
+                const updatedText = `💸 <b>Settlement Request</b>\n\n${debtorName} wants to settle ₹${settlement.amount} with ${creditorName}.\n\n⏳ <i>${approvedName} approved. Waiting for ${waitingForName}...</i>`;
+                // Remove the button of the person who just voted
+                const remainingButtons = [];
+                if (!debtorApproved)
+                    remainingButtons.push({ text: `✅ Approve (${debtorName})`, callback_data: `approve_settlement_${settlement._id}_${debtorId}` });
+                if (!creditorApproved)
+                    remainingButtons.push({ text: `✅ Approve (${creditorName})`, callback_data: `approve_settlement_${settlement._id}_${creditorId}` });
+                if (callbackQuery.message && callbackQuery.message.message_id) {
+                    await TelegramService_1.TelegramService.editMessageText(chatId, callbackQuery.message.message_id, updatedText, {
+                        inline_keyboard: [remainingButtons]
+                    }).catch(() => { });
+                }
+                else {
+                    await TelegramService_1.TelegramService.sendMessage(chatId, updatedText, { inline_keyboard: [remainingButtons] });
+                }
             }
         }
     }
