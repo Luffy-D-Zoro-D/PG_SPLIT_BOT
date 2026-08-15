@@ -114,8 +114,8 @@ export class DashboardController {
       const groupId = parseInt(groupIdStr, 10);
       const dateFilter = DashboardController.getDateFilter(range);
 
-      const expenses = await Expense.find({ telegramChatId: groupId, status: 'CONFIRMED', ...dateFilter } as any);
-      const settlements = await Settlement.find({ telegramChatId: groupId, ...dateFilter } as any);
+      const expenses = await Expense.find({ telegramChatId: groupId, status: 'CONFIRMED', ...dateFilter } as any).lean();
+      const settlements = await Settlement.find({ telegramChatId: groupId, ...dateFilter } as any).lean();
       
       const { net: netBalances, gross: grossBalances } = LedgerService.calculateBalances(expenses, settlements);
       

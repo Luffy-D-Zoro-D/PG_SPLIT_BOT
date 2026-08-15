@@ -420,6 +420,13 @@ export class TelegramWebhookController {
         return;
       }
 
+      // Acknowledge the callback immediately to remove loading state
+      await axios.post(`https://api.telegram.org/bot${process.env.TELEGRAM_BOT_TOKEN}/answerCallbackQuery`, {
+        callback_query_id: callbackQuery.id,
+        text: "✅ Vote recorded.",
+        show_alert: false
+      }).catch((e: any) => console.error(e));
+
       // Atomically add the user to approvedBy using $addToSet
       const settlement = await Settlement.findOneAndUpdate(
         { _id: settlementId, status: 'PENDING_APPROVAL' },
@@ -469,6 +476,10 @@ export class TelegramWebhookController {
             WhatsAppService.sendGroupMessage(waGroupName, waMsg).catch((e: any) => {
               console.error('WhatsApp send error:', e.message || e);
             });
+          }
+
+          if (callbackQuery.message && callbackQuery.message.message_id) {
+            await TelegramService.editMessageReplyMarkup(chatId, callbackQuery.message.message_id, { inline_keyboard: [] }).catch(() => {});
           }
         }
       } else {
