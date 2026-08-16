@@ -10,6 +10,7 @@ RUN npm run build
 FROM node:22-bookworm AS backend-build
 WORKDIR /app/backend
 COPY backend/package*.json ./
+COPY backend/patch-wrb.js ./
 RUN npm ci
 COPY backend/ ./
 RUN npm run build
@@ -35,6 +36,7 @@ COPY --from=frontend-build /app/frontend/dist ./frontend/dist
 WORKDIR /app/backend
 COPY --from=backend-build /app/backend/dist ./dist
 COPY backend/package*.json ./
+COPY backend/patch-wrb.js ./
 RUN npm ci --omit=dev
 
 # Create uploads directory (will be mounted as volume in production)
