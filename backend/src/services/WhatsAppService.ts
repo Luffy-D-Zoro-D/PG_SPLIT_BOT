@@ -107,6 +107,25 @@ export class WhatsAppService {
                 const groupJid = msg.key.remoteJid!;
                 const senderJid = msg.key.participant || msg.participant || msg.key.remoteJid || '';
 
+                // Immediately check if the group is linked to ExpenseBot
+                let groupName = this.cachedGroupJidMap.get(groupJid);
+                if (!groupName) {
+                    try {
+                        const metadata = await this.sock!.groupMetadata(groupJid);
+                        groupName = metadata.subject;
+                        this.cachedGroupJidMap.set(groupJid, groupName!);
+                    } catch (e) {
+                        continue;
+                    }
+                }
+                const Group = require('../models/Group').default;
+                const group = await Group.findOne({ title: groupName });
+                if (!group) {
+                    // Silently ignore messages from unlinked groups to prevent spam and wasted API calls!
+                    continue;
+                }
+
+
                 let text = msg.message.conversation || msg.message.extendedTextMessage?.text || msg.message.imageMessage?.caption || msg.message.videoMessage?.caption || msg.message.documentMessage?.caption || '';
                 let imageUrl: string | undefined = undefined;
 
@@ -323,22 +342,6 @@ export class WhatsAppService {
                 }
 
                 // If not yes/no, Process Natural Language Expense / Settlement
-                let groupName = this.cachedGroupJidMap.get(groupJid);
-                if (!groupName) {
-                    try {
-                        const metadata = await this.sock!.groupMetadata(groupJid);
-                        groupName = metadata.subject;
-                        this.cachedGroupJidMap.set(groupJid, groupName!);
-                    } catch (e) {
-                        continue;
-                    }
-                }
-                const Group = require('../models/Group').default;
-                const group = await Group.findOne({ title: groupName });
-                if (!group) {
-                    await this.sock!.sendMessage(groupJid, { text: '❌ Group not linked to ExpenseBot. Please create it in Telegram first with the exact same name.' });
-                    continue;
-                }
                 const User = require('../models/User').default;
                 const pushname = msg.pushName || 'WA User';
                 const cleanSenderJid = senderJid.split('@')[0];

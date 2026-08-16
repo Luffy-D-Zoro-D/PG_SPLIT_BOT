@@ -249,6 +249,7 @@ whatsapp-auth/
 > **NEVER commit the `whatsapp-auth/` directory to Git.** It contains sensitive session keys. If compromised, an attacker can fully hijack the WhatsApp account. Add `whatsapp-auth` to your `.gitignore`.
 
 ### Resetting Authentication
+
 To completely reset authentication (e.g., to log in with a different number), delete the entire `whatsapp-auth` directory and restart the application.
 
 ---
@@ -284,11 +285,11 @@ Connected
 ```typescript
 this.sock.ev.on('connection.update', async (update) => {
     const { connection, lastDisconnect, qr } = update;
-    
+  
     if (qr) {
         qrcode.generate(qr, { small: true });
     }
-    
+  
     if (connection === 'close') {
         const shouldReconnect = lastDisconnect?.error?.output?.statusCode !== DisconnectReason.loggedOut;
         if (shouldReconnect) {
@@ -310,9 +311,11 @@ this.sock.ev.on('connection.update', async (update) => {
 To prevent the bot from replying to personal messages or unauthorized groups, you must implement strict JID filtering.
 
 ### Group JID Format
+
 Group JIDs look like this: `120363041234567890@g.us`
 
 ### Extraction and Caching
+
 When the bot connects, it should fetch all groups it belongs to and cache their JIDs and names. This allows the bot to map a raw JID back to a human-readable group name.
 
 ```typescript
@@ -324,6 +327,7 @@ for (const id in groups) {
 ```
 
 ### Message Filtering
+
 When a message arrives, check if it's from a group, and verify if that group is authorized in your database.
 
 ```typescript
@@ -369,6 +373,7 @@ AI
 ```
 
 ### Supported Types in Reference
+
 * **Standard Text:** Mapped directly to AI.
 * **Images:** Media is downloaded using `downloadContentFromMessage`, converted to base64, and sent to AI with the caption.
 * **Audio/Voice Notes:** Media is downloaded, saved to disk, transcribed via OpenAI Whisper, and the resulting text is passed to the AI.
@@ -381,7 +386,7 @@ Before hitting the business logic or AI, implement strict guardrails to save com
 
 1. **Valid Message Check:** `if (!msg.message) return;`
 2. **Group Check:** `if (!isGroup) return;`
-3. **Self Check:** 
+3. **Self Check:**
    ```typescript
    // Prevent infinite loops if the bot replies to itself
    if (msg.key.fromMe && text.startsWith('🤖')) return;
@@ -395,11 +400,13 @@ Before hitting the business logic or AI, implement strict guardrails to save com
 The AI acts as the "brain" translating messy WhatsApp chat into structured JSON logic.
 
 ### Environment setup
+
 * `AI_API_KEY`: API key for OpenAI, Groq, etc.
 * `AI_TEXT_MODEL`: e.g., `gpt-4o`, `llama-3.3-70b-versatile`
 * `AI_AUDIO_MODEL`: e.g., `whisper-large-v3`
 
 ### Flow
+
 ```text
 WhatsApp text
       ↓
@@ -430,7 +437,7 @@ const schema = z.object({
 
 async function processWithAI(text: string, context: string[]) {
     const openai = new OpenAI({ apiKey: process.env.AI_API_KEY });
-    
+  
     const response = await openai.chat.completions.create({
         model: 'gpt-4o',
         response_format: { type: 'json_object' },
@@ -440,7 +447,7 @@ async function processWithAI(text: string, context: string[]) {
             { role: 'user', content: text }
         ]
     });
-    
+  
     return schema.parse(JSON.parse(response.choices[0].message.content!));
 }
 ```
@@ -452,16 +459,19 @@ async function processWithAI(text: string, context: string[]) {
 To send messages back, use `sock.sendMessage`.
 
 ### Replying to the group
+
 ```typescript
 await this.sock.sendMessage(groupJid, { text: `🤖 *BOTTY*\n${aiResponse.chatResponse}` });
 ```
 
 ### Replying to a specific message (Quoting)
+
 ```typescript
 await this.sock.sendMessage(groupJid, { text: 'Confirmed.' }, { quoted: msg });
 ```
 
 ### Important considerations
+
 * Ensure messages are formatted nicely. WhatsApp supports bold (`*text*`), italic (`_text_`), and strikethrough (`~text~`).
 * Always prepend a bot identifier (e.g., `🤖`) so users know it's an automated response, and so your own filters can easily ignore bot messages.
 
@@ -472,10 +482,11 @@ await this.sock.sendMessage(groupJid, { text: 'Confirmed.' }, { quoted: msg });
 While WhatsApp has native polls, tracking them via Baileys is highly complex (requiring decryption of `messages.update` events). **The reference implementation uses a much simpler text-reply pattern.**
 
 ### How it works:
+
 1. **Creation:** The bot generates a pending record in the database.
 2. **Prompt:** The bot sends a message: `*Reply* to this message with "yes" or "no".`
 3. **Tracking:** The ID of the bot's sent message (`confirmMsg?.key?.id`) is saved in the database alongside the pending record.
-4. **Resolution:** 
+4. **Resolution:**
    * When a user replies to the bot's message, `msg.message.extendedTextMessage?.contextInfo?.stanzaId` contains the ID of the quoted message.
    * The backend searches the database for a pending record with that `whatsappPollMessageId`.
    * If found, it checks if the reply text is "yes", "y", "no", or "n", and processes the confirmation accordingly.
@@ -506,6 +517,7 @@ Business logic execution
 > **PROJECT-SPECIFIC BUSINESS LOGIC** - This section explains the logic unique to the reference app. When rebuilding for a new project, you will replace this with your own domain logic (e.g., scheduling, CRM integration, ticketing).
 
 In the reference implementation:
+
 1. AI identifies the `CREATE_EXPENSE` intent and extracts `totalAmount`, `paidBy`, `sharedExpense`, and `personalExpenses`.
 2. Math is validated (`totalAmount == sharedAmount + personalAmount`).
 3. An `Expense` MongoDB document is created with status `PENDING_CONFIRMATION`.
@@ -563,14 +575,14 @@ Ready
 
 ## 15. Environment Variables
 
-| Variable | Required? | Purpose | Example |
-| -------- | --------- | ------- | ------- |
-| `WHATSAPP_AUTH_PATH` | No | Directory to store session keys | `./whatsapp-auth` |
-| `AI_API_KEY` | Yes | Key for OpenAI or Groq | `your_api_key_here` |
-| `AI_BASE_URL` | No | Override for custom AI providers | `https://api.groq.com/openai/v1` |
-| `AI_TEXT_MODEL` | No | LLM model name | `llama-3.3-70b-versatile` |
-| `AI_AUDIO_MODEL` | No | Whisper model name | `whisper-large-v3` |
-| `MONGO_URI` | Yes* | Connection string for database | `mongodb://localhost:27017/db` |
+| Variable               | Required? | Purpose                          | Example                            |
+| ---------------------- | --------- | -------------------------------- | ---------------------------------- |
+| `WHATSAPP_AUTH_PATH` | No        | Directory to store session keys  | `./whatsapp-auth`                |
+| `AI_API_KEY`         | Yes       | Key for OpenAI or Groq           | `your_api_key_here`              |
+| `AI_BASE_URL`        | No        | Override for custom AI providers | `https://api.groq.com/openai/v1` |
+| `AI_TEXT_MODEL`      | No        | LLM model name                   | `llama-3.3-70b-versatile`        |
+| `AI_AUDIO_MODEL`     | No        | Whisper model name               | `whisper-large-v3`               |
+| `MONGO_URI`          | Yes*      | Connection string for database   | `mongodb://localhost:27017/db`   |
 
 *(If using a database)*
 
@@ -596,11 +608,13 @@ npx tsc --init
 ```
 
 Create `.env`:
+
 ```env
 AI_API_KEY=your_key_here
 ```
 
 Ensure you update `.gitignore`:
+
 ```text
 node_modules/
 .env
@@ -614,6 +628,7 @@ whatsapp-auth/
 Below is the absolute minimum code required to connect Baileys, filter a group, ask an AI, and reply.
 
 **`index.ts`**
+
 ```typescript
 import { makeWASocket, useMultiFileAuthState } from '@whiskeysockets/baileys';
 import qrcode from 'qrcode-terminal';
@@ -641,7 +656,7 @@ async function start() {
     sock.ev.on('connection.update', async (update) => {
         const { connection, qr } = update;
         if (qr) qrcode.generate(qr, { small: true });
-        
+      
         if (connection === 'open') {
             console.log('Connected!');
             // Find target group JID
@@ -654,7 +669,7 @@ async function start() {
     sock.ev.on('messages.upsert', async (m) => {
         if (m.type !== 'notify') return;
         const msg = m.messages[0];
-        
+      
         // Filters
         if (!msg.message || msg.key.fromMe) return;
         if (msg.key.remoteJid !== groupJid) return;
@@ -685,6 +700,7 @@ start();
 *For the full reference implementation, review `backend/src/services/WhatsAppService.ts` and `backend/src/services/AIService.ts` in the source repository.*
 
 **Key highlights of the full implementation:**
+
 * Implements robust error handling and reconnection loops on `connection.update`.
 * Handles media downloads by converting Streams to Buffers and formatting as base64 for vision models.
 * Caches a rolling window of chat history per `groupJid`.
@@ -695,20 +711,20 @@ start();
 
 ## 19. Error Handling
 
-| Scenario | Cause | Recommended Handling |
-| :--- | :--- | :--- |
-| **QR Timeout** | User takes too long to scan. | `connection.update` throws an error. Catch it and call the initialization function again. |
-| **Connection Closed** | Network drop or WhatsApp server resets connection. | Check `lastDisconnect.error.output.statusCode`. If it is **not** `DisconnectReason.loggedOut`, automatically wait 3s and reconnect. |
-| **Logged Out** | User revoked access via their phone. | **Critical:** Delete the `whatsapp-auth` folder entirely and restart the app to generate a new QR code. |
-| **AI Timeout/Rate Limit** | OpenAI/Groq is down or rate limited. | Wrap AI calls in `try/catch`. Send a fallback message to WhatsApp: `"❌ AI is currently unavailable."` |
-| **Auth File Corruption** | Server crashed mid-write to `whatsapp-auth`. | Try deleting `session-*.json` files. If it persists, nuke the `whatsapp-auth` folder and re-login. |
+| Scenario                        | Cause                                              | Recommended Handling                                                                                                                         |
+| :------------------------------ | :------------------------------------------------- | :------------------------------------------------------------------------------------------------------------------------------------------- |
+| **QR Timeout**            | User takes too long to scan.                       | `connection.update` throws an error. Catch it and call the initialization function again.                                                  |
+| **Connection Closed**     | Network drop or WhatsApp server resets connection. | Check`lastDisconnect.error.output.statusCode`. If it is **not** `DisconnectReason.loggedOut`, automatically wait 3s and reconnect. |
+| **Logged Out**            | User revoked access via their phone.               | **Critical:** Delete the `whatsapp-auth` folder entirely and restart the app to generate a new QR code.                              |
+| **AI Timeout/Rate Limit** | OpenAI/Groq is down or rate limited.               | Wrap AI calls in`try/catch`. Send a fallback message to WhatsApp: `"❌ AI is currently unavailable."`                                    |
+| **Auth File Corruption**  | Server crashed mid-write to`whatsapp-auth`.      | Try deleting`session-*.json` files. If it persists, nuke the `whatsapp-auth` folder and re-login.                                        |
 
 ---
 
 ## 20. Security
 
 > [!WARNING]
-> **Session Security:** The `whatsapp-auth` folder is the equivalent of an unlocked physical phone. If leaked, an attacker can read messages and impersonate the number. 
+> **Session Security:** The `whatsapp-auth` folder is the equivalent of an unlocked physical phone. If leaked, an attacker can read messages and impersonate the number.
 
 * **Persistence:** Ensure `whatsapp-auth` is strictly excluded from Git.
 * **Database Credentials:** Keep MongoDB URIs and AI API keys in `.env` only.
@@ -722,14 +738,17 @@ start();
 When deploying to a VPS (e.g., using PM2) or Docker, special care must be taken regarding the authentication state.
 
 ### Docker Considerations
+
 If using Docker, **you must mount a volume** for the `whatsapp-auth` directory. If you do not, the container will lose its WhatsApp login session every time it restarts, requiring a new QR scan.
 
 **Docker Run command:**
+
 ```bash
 docker run -v /absolute/path/on/host/whatsapp-auth:/app/whatsapp-auth my-bot
 ```
 
 ### Process Managers (PM2)
+
 If using PM2, the bot will automatically restart if it crashes. Ensure the `whatsapp-auth` directory is in the root of the project so PM2 doesn't trigger continuous restarts when Baileys updates the session files.
 
 ---
@@ -737,11 +756,13 @@ If using PM2, the bot will automatically restart if it crashes. Ensure the `what
 ## 22. Development vs Production
 
 ### Development
+
 * Run via `npm run dev` (using `tsx` or `ts-node`).
 * The QR code will print in the terminal for easy scanning.
 * Keep Pino logger at `level: 'debug'` to see Baileys XML traffic if debugging is needed.
 
 ### Production
+
 * Compile to JS using `npm run build` and run via `node dist/index.js`.
 * Disable Baileys logging (`level: 'silent'`) as it generates massive amounts of stdout which will bloat PM2/Docker logs.
 * Expose a secure HTTP endpoint (e.g., `/api/whatsapp-qr`) that returns `qrcode.generate()` output as an image or raw string so you can scan the QR code from a web dashboard rather than SSH-ing into the production server.
@@ -751,15 +772,19 @@ If using PM2, the bot will automatically restart if it crashes. Ensure the `what
 ## 23. Troubleshooting Guide
 
 **Q: The QR code is not appearing in the terminal.**
+
 * Fix: Ensure `whatsapp-auth` is completely deleted. If Baileys finds corrupted auth files, it might hang instead of generating a QR.
 
 **Q: The bot receives messages but does not reply.**
+
 * Fix: Check your JID filters. Add a `console.log(msg.key.remoteJid)` to ensure the group JID exactly matches what you have authorized.
 
 **Q: The bot replies to every single message in my personal DMs.**
+
 * Fix: You forgot to implement `if (!msg.key.remoteJid?.endsWith('@g.us')) return;`
 
 **Q: Error: `QR refs attempts ended`**
+
 * Fix: This happens when the QR code is displayed but not scanned for ~60 seconds. Implement the reconnection loop as shown in section 6 to automatically regenerate the QR.
 
 ---
@@ -782,6 +807,7 @@ To add this WhatsApp + AI integration to an existing Node.js project:
 If delegating the rebuild of this architecture to an AI agent or developer, provide them with this contract:
 
 > **The WhatsApp Integration Implementation MUST:**
+>
 > 1. Use `@whiskeysockets/baileys`.
 > 2. NOT use Puppeteer or `whatsapp-web.js`.
 > 3. Save and persist WhatsApp authentication state to a local directory.
@@ -818,6 +844,7 @@ npx tsx src/index.ts
 ```
 
 **Reset Authentication:**
+
 ```bash
 rm -rf whatsapp-auth/
 # Restart application to get a new QR code
@@ -888,6 +915,7 @@ rm -rf whatsapp-auth/
 This project implements an advanced AI routing configuration to maximize speed and reduce costs by connecting to Groq instead of standard OpenAI servers.
 
 ### What We Use
+
 * **Provider API:** Groq (accessed via the standard `openai` npm package, pointing the `baseURL` to `https://api.groq.com/openai/v1`).
 * **Text Model (`AI_TEXT_MODEL`):** `llama-3.3-70b-versatile` (Meta's Llama 3.3). Used for natural language chat, identifying intent, and extracting JSON data.
 * **Audio Model (`AI_AUDIO_MODEL`):** `whisper-large-v3` (OpenAI's Whisper). Used to transcribe voice notes into text before passing them to the text model.

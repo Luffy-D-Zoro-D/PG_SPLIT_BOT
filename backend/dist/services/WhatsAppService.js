@@ -17,7 +17,6 @@ class WhatsAppService {
     static qrCode = null;
     static cachedGroupJidMap = new Map();
     static chatHistories = new Map();
-    static activePolls = new Map();
     static downloadMediaMessage = null;
     static downloadContentFromMessage = null;
     static async initialize() {
@@ -62,13 +61,19 @@ class WhatsAppService {
             }
             if (connection === 'close') {
                 const shouldReconnect = lastDisconnect?.error?.output?.statusCode !== DisconnectReason.loggedOut;
-                console.log('WhatsApp connection closed due to ', lastDisconnect?.error, ', reconnecting ', shouldReconnect);
+                const errorMsg = lastDisconnect?.error?.message || lastDisconnect?.error?.toString() || 'Unknown Error';
                 this.isReady = false;
+                if (errorMsg.includes('QR refs attempts ended')) {
+                    console.log('⏳ QR Code expired. Regenerating...');
+                }
+                else {
+                    console.log('⚠️ WhatsApp connection closed due to:', errorMsg, '| Reconnecting:', shouldReconnect);
+                }
                 if (shouldReconnect) {
                     setTimeout(() => this.initialize(), 3000);
                 }
                 else {
-                    console.log('You are logged out. Please delete the session folder and restart.');
+                    console.log('🚪 You are logged out. Please delete the session folder and restart.');
                     try {
                         fs_1.default.rmSync(WHATSAPP_AUTH_PATH, { recursive: true, force: true });
                     }
@@ -103,6 +108,24 @@ class WhatsAppService {
                     continue;
                 const groupJid = msg.key.remoteJid;
                 const senderJid = msg.key.participant || msg.participant || msg.key.remoteJid || '';
+                // Immediately check if the group is linked to ExpenseBot
+                let groupName = this.cachedGroupJidMap.get(groupJid);
+                if (!groupName) {
+                    try {
+                        const metadata = await this.sock.groupMetadata(groupJid);
+                        groupName = metadata.subject;
+                        this.cachedGroupJidMap.set(groupJid, groupName);
+                    }
+                    catch (e) {
+                        continue;
+                    }
+                }
+                const Group = require('../models/Group').default;
+                const group = await Group.findOne({ title: groupName });
+                if (!group) {
+                    // Silently ignore messages from unlinked groups to prevent spam and wasted API calls!
+                    continue;
+                }
                 let text = msg.message.conversation || msg.message.extendedTextMessage?.text || msg.message.imageMessage?.caption || msg.message.videoMessage?.caption || msg.message.documentMessage?.caption || '';
                 let imageUrl = undefined;
                 const downloadContentFromMessage = WhatsAppService.downloadContentFromMessage;
@@ -152,36 +175,6 @@ class WhatsAppService {
                         console.error('Error downloading/transcribing WhatsApp audio:', err);
                         await this.sock.sendMessage(groupJid, { text: '❌ Failed to understand the audio.' });
                         continue;
-                    }
-                }
-                if (msg.message?.pollUpdateMessage) {
-                    const pollCreationKey = msg.message.pollUpdateMessage.pollCreationMessageKey;
-                    const pollId = pollCreationKey.id;
-                    const originalPollMsg = WhatsAppService.activePolls.get(pollId);
-                    if (originalPollMsg) {
-                        const { getAggregateVotesInPollMessage } = require('@whiskeysockets/baileys');
-                        const aggregatedVotes = getAggregateVotesInPollMessage({
-                            message: originalPollMsg,
-                            pollUpdates: [msg]
-                        });
-                        const yesVotes = aggregatedVotes.find((v) => v.name.includes('Yes'))?.voters || [];
-                        const noVotes = aggregatedVotes.find((v) => v.name.includes('No'))?.voters || [];
-                        const cleanSender = senderJid.split('@')[0];
-                        const voterJid = msg.key.participant || senderJid;
-                        if (yesVotes.includes(voterJid) || yesVotes.some((v) => v.includes(cleanSender))) {
-                            text = 'yes';
-                        }
-                        else if (noVotes.includes(voterJid) || noVotes.some((v) => v.includes(cleanSender))) {
-                            text = 'no';
-                        }
-                        if (text) {
-                            if (!msg.message.extendedTextMessage) {
-                                msg.message.extendedTextMessage = { contextInfo: { stanzaId: pollId } };
-                            }
-                            else {
-                                msg.message.extendedTextMessage.contextInfo = { stanzaId: pollId };
-                            }
-                        }
                     }
                 }
                 if (!text)
@@ -338,23 +331,6 @@ class WhatsAppService {
                     }
                 }
                 // If not yes/no, Process Natural Language Expense / Settlement
-                let groupName = this.cachedGroupJidMap.get(groupJid);
-                if (!groupName) {
-                    try {
-                        const metadata = await this.sock.groupMetadata(groupJid);
-                        groupName = metadata.subject;
-                        this.cachedGroupJidMap.set(groupJid, groupName);
-                    }
-                    catch (e) {
-                        continue;
-                    }
-                }
-                const Group = require('../models/Group').default;
-                const group = await Group.findOne({ title: groupName });
-                if (!group) {
-                    await this.sock.sendMessage(groupJid, { text: '❌ Group not linked to ExpenseBot. Please create it in Telegram first with the exact same name.' });
-                    continue;
-                }
                 const User = require('../models/User').default;
                 const pushname = msg.pushName || 'WA User';
                 const cleanSenderJid = senderJid.split('@')[0];
@@ -409,21 +385,10 @@ class WhatsAppService {
                 const users = await LocalUser.find({ telegramUserId: { $in: Array.from(allUserIds) } });
                 const userMap = new Map();
                 users.forEach((u) => userMap.set(u.telegramUserId, u.firstName || u.username || u.telegramUserId.toString()));
-                let confirmText = LocalExpenseService.formatExpenseConfirmation(result, userMap, 'whatsapp');
-                confirmText = confirmText.replace(/Reply to this message with "yes" to confirm or "no" to cancel\./gi, '').trim();
+                const confirmText = LocalExpenseService.formatExpenseConfirmation(result, userMap, 'whatsapp');
                 const confirmMsg = await this.sock.sendMessage(groupJid, { text: confirmText });
-                const pollMsg = await this.sock.sendMessage(groupJid, {
-                    poll: {
-                        name: 'Approve this expense?',
-                        values: ['✅ Yes', '❌ No'],
-                        selectableCount: 1
-                    }
-                }, { quoted: confirmMsg });
                 const Expense = require('../models/Expense').default;
-                await Expense.updateOne({ _id: result._id }, { whatsappPollMessageId: pollMsg?.key?.id });
-                if (pollMsg && pollMsg.key && pollMsg.key.id) {
-                    WhatsAppService.activePolls.set(pollMsg.key.id, pollMsg.message);
-                }
+                await Expense.updateOne({ _id: result._id }, { whatsappPollMessageId: confirmMsg?.key?.id });
             }
         });
         this.sock.ev.on('messages.update', async (events) => {
