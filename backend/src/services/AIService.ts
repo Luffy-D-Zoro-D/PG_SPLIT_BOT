@@ -99,7 +99,7 @@ Rules:
 
         const response = await openai.chat.completions.create({
             messages: messages,
-            model: process.env.AI_TEXT_MODEL || 'llama-3.1-70b-versatile',
+            model: process.env.AI_TEXT_MODEL || 'openai/gpt-oss-20b',
             temperature: 0.1,
             response_format: { type: 'json_object' }
         });
