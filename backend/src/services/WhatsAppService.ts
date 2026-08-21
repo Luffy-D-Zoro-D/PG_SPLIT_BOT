@@ -37,13 +37,14 @@ export class WhatsAppService {
         const { state, saveCreds } = await useMultiFileAuthState(WHATSAPP_AUTH_PATH);
         const { version } = await fetchLatestBaileysVersion();
         const pino = require('pino');
+        const logger = pino({ level: 'warn' });
         this.sock = makeWASocket({
             version,
             auth: state,
             printQRInTerminal: false,
             syncFullHistory: false,
             markOnlineOnConnect: true,
-            logger: pino({ level: 'silent' }),
+            logger: logger,
             browser: baileys.Browsers.macOS('Desktop')
         });
         this.sock.ev.on('creds.update', saveCreds);
