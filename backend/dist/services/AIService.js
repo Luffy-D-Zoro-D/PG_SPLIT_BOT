@@ -80,7 +80,7 @@ Rules:
    - Example 3: "I paid 100 total, 60 for shared food with Anuj, and 40 for Anuj personal medicine" -> totalAmount: 100, sharedExpense: { amount: 60, ... }, personalExpenses: [{ user: "Anuj", amount: 40 }].
 2. CORRECTIONS & CANCEL: If the user says "forget...", "cancel...", "ignore...", or provides a corrected statement, ignore past erroneous context in chat history and evaluate strictly based on the user's latest correction.
 3. FIRST, determine if the user is actually trying to record a financial expense. If the message is a general question, math problem, greeting, or casual conversation, set intent="CHAT" and provide a helpful, friendly response in "chatResponse".
-4. If it IS an expense but information is ambiguous (missing amounts or missing people), set intent="CREATE_EXPENSE", needsClarification=true, and ask a clarificationQuestion ALWAYS in English.
+4. DEFAULT TO EQUAL SPLIT: If the message implies an expense but does not explicitly specify who to split with, DO NOT ask for clarification. Automatically assume it is an EQUAL split among ALL group members. Calculate the equal shares for each member.
 5. If the user states a direct debt like "A owes B X amount", treat this as an expense where B is the "paidBy" (creditor) and A has a personalExpense (debtor).
 6. You must map users to one of the provided Group members.
 7. If the user mentions names that are NOT in the Group members list, set needsClarification=true and explain in English that you can only track expenses for members currently in this Telegram group. Ask them to add those users to the group.
@@ -95,15 +95,16 @@ Rules:
         messages.push({ role: 'user', content: text });
         const response = await openai.chat.completions.create({
             messages: messages,
-            model: process.env.AI_TEXT_MODEL || 'llama-3.3-70b-versatile',
-            temperature: 0.1,
-            response_format: { type: 'json_object' }
+            model: process.env.AI_TEXT_MODEL || 'openai/gpt-oss-20b',
+            temperature: 0.1
         });
-        const content = response.choices[0]?.message?.content;
+        let content = response.choices[0]?.message?.content;
         // console.log(`[AI Raw Output]:\n${content}\n`);
         if (!content) {
             throw new Error('No response from AI provider');
         }
+        // Clean markdown code blocks if the AI includes them
+        content = content.replace(/```json/gi, '').replace(/```/gi, '').trim();
         try {
             const parsed = JSON.parse(content);
             return exports.ExpenseExtractionSchema.parse(parsed);

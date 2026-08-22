@@ -298,15 +298,6 @@ class TelegramWebhookController {
                 WhatsAppService_1.WhatsAppService.broadcastToSplitHistory(expense, 'expense');
             }
         }
-        else if (data.startsWith('cancel_')) {
-            const expenseId = data.split('_')[1];
-            await ExpenseService_1.ExpenseService.cancelExpense(expenseId);
-            // Remove buttons upon successful cancellation
-            if (message && message.message_id) {
-                await TelegramService_1.TelegramService.editMessageReplyMarkup(chatId, message.message_id, { inline_keyboard: [] }).catch(() => { });
-            }
-            await TelegramService_1.TelegramService.sendMessage(chatId, `❌ Expense cancelled.`);
-        }
         else if (data.startsWith('cancel_settlement_')) {
             const settlementId = data.split('_')[2];
             const settlement = await Settlement_1.default.findById(settlementId);
@@ -330,6 +321,15 @@ class TelegramWebhookController {
             if (message && message.message_id) {
                 await TelegramService_1.TelegramService.editMessageText(chatId, message.message_id, `❌ <b>Settlement Cancelled</b>\n\nThe settlement request for ₹${settlement.amount} was cancelled.`, { inline_keyboard: [] });
             }
+        }
+        else if (data.startsWith('cancel_')) {
+            const expenseId = data.split('_')[1];
+            await ExpenseService_1.ExpenseService.cancelExpense(expenseId);
+            // Remove buttons upon successful cancellation
+            if (message && message.message_id) {
+                await TelegramService_1.TelegramService.editMessageReplyMarkup(chatId, message.message_id, { inline_keyboard: [] }).catch(() => { });
+            }
+            await TelegramService_1.TelegramService.sendMessage(chatId, `❌ Expense cancelled.`);
         }
         else if (data.startsWith('approve_settlement_')) {
             const parts = data.split('_');
@@ -400,19 +400,22 @@ class TelegramWebhookController {
                 const waitingForId = debtorApproved ? creditorId : debtorId;
                 const waitingForName = debtorApproved ? creditorName : debtorName;
                 const updatedText = `💸 <b>Settlement Request</b>\n\n${debtorName} wants to settle ₹${settlement.amount} with ${creditorName}.\n\n⏳ <i>${approvedName} approved. Waiting for ${waitingForName}...</i>`;
-                // Remove the button of the person who just voted
                 const remainingButtons = [];
                 if (!debtorApproved)
                     remainingButtons.push({ text: `✅ Approve (${debtorName})`, callback_data: `approve_settlement_${settlement._id}_${debtorId}` });
                 if (!creditorApproved)
                     remainingButtons.push({ text: `✅ Approve (${creditorName})`, callback_data: `approve_settlement_${settlement._id}_${creditorId}` });
+                const keyboard = [
+                    remainingButtons,
+                    [{ text: `❌ Cancel Settlement`, callback_data: `cancel_settlement_${settlement._id}` }]
+                ];
                 if (callbackQuery.message && callbackQuery.message.message_id) {
                     await TelegramService_1.TelegramService.editMessageText(chatId, callbackQuery.message.message_id, updatedText, {
-                        inline_keyboard: [remainingButtons]
+                        inline_keyboard: keyboard
                     }).catch(() => { });
                 }
                 else {
-                    await TelegramService_1.TelegramService.sendMessage(chatId, updatedText, { inline_keyboard: [remainingButtons] });
+                    await TelegramService_1.TelegramService.sendMessage(chatId, updatedText, { inline_keyboard: keyboard });
                 }
             }
         }

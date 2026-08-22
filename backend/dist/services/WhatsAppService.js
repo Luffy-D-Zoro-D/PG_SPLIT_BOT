@@ -39,13 +39,14 @@ class WhatsAppService {
         const { state, saveCreds } = await useMultiFileAuthState(WHATSAPP_AUTH_PATH);
         const { version } = await fetchLatestBaileysVersion();
         const pino = require('pino');
+        const logger = pino({ level: 'warn' });
         this.sock = makeWASocket({
             version,
             auth: state,
             printQRInTerminal: false,
             syncFullHistory: false,
             markOnlineOnConnect: true,
-            logger: pino({ level: 'silent' }),
+            logger: logger,
             browser: baileys.Browsers.macOS('Desktop')
         });
         this.sock.ev.on('creds.update', saveCreds);
@@ -185,7 +186,45 @@ class WhatsAppService {
                 }
                 // Handle Commands
                 if (text.startsWith('/start')) {
-                    await this.sock.sendMessage(groupJid, { text: `🤖 *BOTTY*\nWelcome to PG SPLITTER 👋\n\nYour account is ready.\nYou can simply tell me about an expense in English, Hindi, Marathi, or mixed language.` });
+                    await this.sock.sendMessage(groupJid, { text: `🤖 *BOTTY*\nWelcome to PG SPLITTER 👋\n\nYour account is ready.\nYou can simply tell me about an expense in English, Hindi, Marathi, or mixed language.\n\n*Tip:* If your WhatsApp is not linked to your Telegram account, type \`/link YourTelegramName\` to link it!` });
+                    continue;
+                }
+                if (text.startsWith('/link')) {
+                    const targetName = text.replace('/link', '').trim();
+                    if (!targetName) {
+                        await this.sock.sendMessage(groupJid, { text: `🤖 *BOTTY*\nPlease provide your Telegram name. Example: \`/link Anuj\`` });
+                        continue;
+                    }
+                    try {
+                        const User = require('../models/User').default;
+                        const cleanSenderJid = senderJid.split('@')[0];
+                        // Find the target user in the group
+                        const regex = new RegExp(`^${targetName}$`, 'i');
+                        const targetUser = await User.findOne({
+                            $or: [{ firstName: regex }, { username: regex }],
+                            telegramUserId: { $in: group.members }
+                        });
+                        if (targetUser) {
+                            // Find if there's a fake user currently linked to this WhatsApp
+                            const fakeUser = await User.findOne({ whatsappJid: new RegExp(`^${cleanSenderJid}@`) });
+                            if (fakeUser && fakeUser.telegramUserId !== targetUser.telegramUserId) {
+                                // If the fake user has a fake ID (e.g. > 100000000), we could optionally merge their expenses here.
+                                // For now, just unlink the fake user and link the real one.
+                                fakeUser.whatsappJid = undefined;
+                                await fakeUser.save();
+                            }
+                            targetUser.whatsappJid = senderJid;
+                            await targetUser.save();
+                            await this.sock.sendMessage(groupJid, { text: `🤖 *BOTTY*\n✅ Successfully linked your WhatsApp to Telegram user *${targetUser.firstName}*!` });
+                        }
+                        else {
+                            await this.sock.sendMessage(groupJid, { text: `🤖 *BOTTY*\n❌ Could not find a Telegram user named "${targetName}" in this group.\n\nMake sure you have interacted with the bot on Telegram first.` });
+                        }
+                    }
+                    catch (e) {
+                        console.error('Error linking user:', e);
+                        await this.sock.sendMessage(groupJid, { text: `🤖 *BOTTY*\n❌ Failed to link account.` });
+                    }
                     continue;
                 }
                 if (text.startsWith('/balance')) {
@@ -332,25 +371,31 @@ class WhatsAppService {
                 }
                 // If not yes/no, Process Natural Language Expense / Settlement
                 const User = require('../models/User').default;
-                const pushname = msg.pushName || 'WA User';
+                const pushname = msg.pushName || '';
                 const cleanSenderJid = senderJid.split('@')[0];
                 let sender = await User.findOne({ whatsappJid: new RegExp(`^${cleanSenderJid}@`) });
                 if (!sender) {
-                    sender = await User.findOne({ firstName: pushname, telegramUserId: { $in: group.members } });
+                    // Try to find user by exact match of pushname (case-insensitive)
+                    if (pushname) {
+                        sender = await User.findOne({ firstName: new RegExp(`^${pushname}$`, 'i'), telegramUserId: { $in: group.members } });
+                    }
                     if (sender) {
                         sender.whatsappJid = senderJid;
                         await sender.save();
                     }
                     else {
+                        // Create a temporary fake user, but warn them
+                        const displayName = pushname || 'WA User';
                         const fakeId = parseInt(cleanSenderJid.slice(-9)) || Math.floor(Math.random() * 1000000000);
                         sender = new User({
                             telegramUserId: fakeId,
                             whatsappJid: senderJid,
-                            firstName: pushname
+                            firstName: displayName
                         });
                         await sender.save();
                         group.members.push(fakeId);
                         await group.save();
+                        await this.sock.sendMessage(groupJid, { text: `🤖 *BOTTY*\n⚠️ I couldn't automatically link your WhatsApp to your Telegram account, so I created a temporary account "${displayName}".\n\nTo link to your real Telegram account and fix your balances, type:\n\`/link YourTelegramName\`` });
                     }
                 }
                 const { ExpenseService } = require('./ExpenseService');

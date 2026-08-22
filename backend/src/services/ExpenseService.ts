@@ -35,7 +35,13 @@ export class ExpenseService {
     const senderName = senderUser ? (senderUser.firstName || senderUser.username || undefined) : undefined;
 
     // Call AIService
-    const extraction = await AIService.extractExpense(text, memberNames, chatHistory, senderName);
+    let extraction;
+    try {
+      extraction = await AIService.extractExpense(text, memberNames, chatHistory, senderName);
+    } catch (e: any) {
+      console.error('AI Extraction Error:', e);
+      return { error: `AI Error: ${e.message || 'Failed to understand message.'}` };
+    }
 
     if (extraction.intent === 'CHAT') {
       return { error: 'CHAT', chatResponse: extraction.chatResponse || 'Hello!' };

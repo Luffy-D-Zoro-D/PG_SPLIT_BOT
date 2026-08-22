@@ -67,7 +67,14 @@ class ExpenseService {
         const senderUser = users.find(u => u.telegramUserId === fromUserId);
         const senderName = senderUser ? (senderUser.firstName || senderUser.username || undefined) : undefined;
         // Call AIService
-        const extraction = await AIService_1.AIService.extractExpense(text, memberNames, chatHistory, senderName);
+        let extraction;
+        try {
+            extraction = await AIService_1.AIService.extractExpense(text, memberNames, chatHistory, senderName);
+        }
+        catch (e) {
+            console.error('AI Extraction Error:', e);
+            return { error: `AI Error: ${e.message || 'Failed to understand message.'}` };
+        }
         if (extraction.intent === 'CHAT') {
             return { error: 'CHAT', chatResponse: extraction.chatResponse || 'Hello!' };
         }
