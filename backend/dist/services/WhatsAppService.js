@@ -227,6 +227,42 @@ class WhatsAppService {
                     }
                     continue;
                 }
+                if (text.startsWith('/whoami')) {
+                    try {
+                        const User = require('../models/User').default;
+                        const cleanSenderJid = senderJid.split('@')[0];
+                        const senderUser = await User.findOne({ whatsappJid: new RegExp(`^${cleanSenderJid}@`) });
+                        if (senderUser) {
+                            await this.sock.sendMessage(groupJid, { text: `🤖 *BOTTY*\nYour WhatsApp is currently linked to Telegram account: *${senderUser.firstName || senderUser.username}*` });
+                        }
+                        else {
+                            await this.sock.sendMessage(groupJid, { text: `🤖 *BOTTY*\nYour WhatsApp is not linked to any Telegram account.` });
+                        }
+                    }
+                    catch (e) {
+                        console.error('Error in /whoami:', e);
+                    }
+                    continue;
+                }
+                if (text.startsWith('/unlink')) {
+                    try {
+                        const User = require('../models/User').default;
+                        const cleanSenderJid = senderJid.split('@')[0];
+                        const senderUser = await User.findOne({ whatsappJid: new RegExp(`^${cleanSenderJid}@`) });
+                        if (senderUser) {
+                            senderUser.whatsappJid = undefined;
+                            await senderUser.save();
+                            await this.sock.sendMessage(groupJid, { text: `🤖 *BOTTY*\n✅ Successfully unlinked your WhatsApp from Telegram account: *${senderUser.firstName || senderUser.username}*` });
+                        }
+                        else {
+                            await this.sock.sendMessage(groupJid, { text: `🤖 *BOTTY*\nYour WhatsApp is not linked to any Telegram account.` });
+                        }
+                    }
+                    catch (e) {
+                        console.error('Error in /unlink:', e);
+                    }
+                    continue;
+                }
                 if (text.startsWith('/balance')) {
                     try {
                         const Expense = require('../models/Expense').default;
@@ -356,7 +392,6 @@ class WhatsAppService {
                                     settlement.status = 'CONFIRMED';
                                     await settlement.save();
                                     const { LedgerService } = require('./LedgerService');
-                                    await LedgerService.processSettlement(settlement);
                                     await this.sock.sendMessage(groupJid, { text: `🤖 *BOTTY*\n✅ Settlement of ₹${settlement.amount} is fully confirmed! Both parties approved.` });
                                     await WhatsAppService.broadcastToSplitHistory(settlement, 'settlement');
                                 }
